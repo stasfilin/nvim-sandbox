@@ -138,6 +138,9 @@ func TestUpdateCommandShowsUpgradeInstructions(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Update available: v0.2.0") || !strings.Contains(stdout.String(), "brew upgrade nvim-sandbox") {
 		t.Fatalf("update output = %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "Release notes: https://github.com/stasfilin/nvim-sandbox/releases/tag/v0.2.0") {
+		t.Fatalf("update output does not include release notes: %q", stdout.String())
+	}
 }
 
 func TestUpdateCommandJSONReportsCurrentVersion(t *testing.T) {

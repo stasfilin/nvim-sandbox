@@ -111,6 +111,9 @@ func updateCommand(stateBase string, opts options, stdout io.Writer, stderr io.W
 		latest.LatestVersion,
 		current,
 	)
+	if latest.ReleaseURL != "" {
+		text += "\nRelease notes: " + latest.ReleaseURL
+	}
 	return respond(stdout, opts, 0, payload, text)
 }
 

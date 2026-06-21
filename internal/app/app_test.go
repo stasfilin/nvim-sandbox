@@ -78,62 +78,112 @@ func TestDefaultInstallArguments(t *testing.T) {
 	}
 }
 
-func TestDockerBackendLifecycleCommands(t *testing.T) {
-	commands := [][]string{}
-	SetRunnerForTests(func(args []string) CommandResult {
-		commands = append(commands, append([]string{}, args...))
-		if len(args) > 1 && args[1] == "inspect" {
-			return CommandResult{Code: 0, Stdout: `[{"State":{"Status":"running"}}]`}
-		}
-		return CommandResult{Code: 0, Stdout: "output"}
-	})
-	t.Cleanup(func() { SetRunnerForTests(nil) })
+func TestDockerLikeBackendLifecycleCommands(t *testing.T) {
+	for _, runtimeName := range []string{"docker", "podman"} {
+		t.Run(runtimeName, func(t *testing.T) {
+			commands := [][]string{}
+			SetRunnerForTests(func(args []string) CommandResult {
+				commands = append(commands, append([]string{}, args...))
+				if len(args) > 1 && args[1] == "inspect" {
+					return CommandResult{Code: 0, Stdout: `[{"State":{"Status":"running"}}]`}
+				}
+				return CommandResult{Code: 0, Stdout: "output"}
+			})
+			t.Cleanup(func() { SetRunnerForTests(nil) })
 
-	backend := BackendFor("docker")
-	opts := ContainerOptions{
-		ProjectRoot:   "/host/project",
-		ContainerName: "sandbox-123456",
-		Image:         "ubuntu:24.04",
-		Workspace:     "/workspace",
-		Network:       Network{Enabled: true, Ports: []string{"3000:3000"}},
-	}
-	if err := backend.Create(opts); err != nil {
-		t.Fatal(err)
-	}
-	if err := backend.Start(opts.ContainerName); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := backend.Exec(opts, []string{"go", "test", "./..."}); err != nil {
-		t.Fatal(err)
-	}
-	status, err := backend.Status(opts.ContainerName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status != "running" {
-		t.Fatalf("status = %q, want running", status)
-	}
-	if err := backend.Stop(opts.ContainerName); err != nil {
-		t.Fatal(err)
-	}
-	if err := backend.Destroy(opts.ContainerName); err != nil {
-		t.Fatal(err)
-	}
+			backend := BackendFor(runtimeName)
+			if backend == nil {
+				t.Fatalf("BackendFor(%q) returned nil", runtimeName)
+			}
+			if backend.Name() != runtimeName {
+				t.Fatalf("backend name = %q, want %q", backend.Name(), runtimeName)
+			}
+			opts := ContainerOptions{
+				ProjectRoot:   "/host/project",
+				ContainerName: "sandbox-123456",
+				Image:         "ubuntu:24.04",
+				Workspace:     "/workspace",
+				Network:       Network{Enabled: true, Ports: []string{"3000:3000"}},
+			}
+			if err := backend.Create(opts); err != nil {
+				t.Fatal(err)
+			}
+			if err := backend.Start(opts.ContainerName); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := backend.Exec(opts, []string{"go", "test", "./..."}); err != nil {
+				t.Fatal(err)
+			}
+			status, err := backend.Status(opts.ContainerName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status != "running" {
+				t.Fatalf("status = %q, want running", status)
+			}
+			if err := backend.Stop(opts.ContainerName); err != nil {
+				t.Fatal(err)
+			}
+			if err := backend.Destroy(opts.ContainerName); err != nil {
+				t.Fatal(err)
+			}
 
-	wantCreate := []string{
-		"docker", "create", "--name", "sandbox-123456",
-		"--mount", "type=bind,source=/host/project,target=/workspace",
-		"-p", "3000:3000", "-w", "/workspace", "ubuntu:24.04",
-		"/bin/sh", "-lc", "while sleep 3600; do :; done",
+			wantCreate := []string{
+				runtimeName, "create", "--name", "sandbox-123456",
+				"--mount", "type=bind,source=/host/project,target=/workspace",
+				"-p", "3000:3000", "-w", "/workspace", "ubuntu:24.04",
+				"/bin/sh", "-lc", "while sleep 3600; do :; done",
+			}
+			if !slices.Equal(commands[0], wantCreate) {
+				t.Fatalf("create command = %#v, want %#v", commands[0], wantCreate)
+			}
+			if got := backend.ConnectArgs(opts, []string{"nvim"}); !slices.Equal(got, []string{
+				runtimeName, "exec", "-it", "-w", "/workspace", "sandbox-123456",
+				"/usr/bin/env", "NVIM_SANDBOX=1", "nvim",
+			}) {
+				t.Fatalf("connect command = %#v", got)
+			}
+		})
 	}
-	if !slices.Equal(commands[0], wantCreate) {
-		t.Fatalf("create command = %#v, want %#v", commands[0], wantCreate)
-	}
-	if got := backend.ConnectArgs(opts, []string{"nvim"}); !slices.Equal(got, []string{
-		"docker", "exec", "-it", "-w", "/workspace", "sandbox-123456",
-		"/usr/bin/env", "NVIM_SANDBOX=1", "nvim",
-	}) {
-		t.Fatalf("connect command = %#v", got)
+}
+
+func TestDockerLikeBackendBuildAndImageCommands(t *testing.T) {
+	for _, runtimeName := range []string{"docker", "podman"} {
+		t.Run(runtimeName, func(t *testing.T) {
+			commands := [][]string{}
+			SetRunnerForTests(func(args []string) CommandResult {
+				commands = append(commands, append([]string{}, args...))
+				return CommandResult{Code: 0, Stdout: `[{"Id":"sha256:1234"}]`}
+			})
+			t.Cleanup(func() { SetRunnerForTests(nil) })
+
+			backend := BackendFor(runtimeName)
+			opts := ContainerOptions{
+				ProjectRoot: "/host/project",
+				Dockerfile:  "/host/project/Dockerfile",
+				Image:       "nvim-sandbox-project:latest",
+			}
+			if err := backend.Build(opts); err != nil {
+				t.Fatal(err)
+			}
+			exists, err := backend.ImageStatus(opts.Image)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !exists {
+				t.Fatal("built image was not detected")
+			}
+
+			wantBuild := []string{runtimeName, "build"}
+			if runtimeName == "docker" {
+				wantBuild = append(wantBuild, "--progress", "plain")
+			}
+			wantBuild = append(wantBuild, "-f", opts.Dockerfile, "-t", opts.Image, opts.ProjectRoot)
+			want := [][]string{wantBuild, {runtimeName, "image", "inspect", opts.Image}}
+			if !slices.Equal(commands[0], want[0]) || !slices.Equal(commands[1], want[1]) {
+				t.Fatalf("commands = %#v, want %#v", commands, want)
+			}
+		})
 	}
 }
 

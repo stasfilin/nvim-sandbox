@@ -11,7 +11,7 @@ RELEASE_DIR ?= release
 ARTIFACT_BASENAME ?= nvim-sandbox
 PACKAGE_BASENAME ?= nvim-sandbox_$(VERSION)
 
-.PHONY: build check check-static fmt fmt-check install mod-check package-artifacts shellcheck test test-e2e-apple-container test-e2e-apple-container-bin test-e2e-docker test-e2e-docker-bin test-homebrew test-install test-packages test-race uninstall vet
+.PHONY: build check check-static fmt fmt-check install mod-check package-artifacts shellcheck test test-e2e-apple-container test-e2e-apple-container-bin test-e2e-docker test-e2e-docker-bin test-e2e-podman test-e2e-podman-bin test-homebrew test-install test-packages test-race uninstall vet
 
 build:
 	mkdir -p dist
@@ -61,6 +61,13 @@ test-e2e-docker: build
 test-e2e-docker-bin:
 	@test -x "$(CURDIR)/dist/nvim-sandbox" || (echo "built nvim-sandbox binary not found: $(CURDIR)/dist/nvim-sandbox"; exit 1)
 	NVIM_SANDBOX_BIN="$(CURDIR)/dist/nvim-sandbox" ./tests/e2e_docker.sh
+
+test-e2e-podman: build
+	$(MAKE) test-e2e-podman-bin
+
+test-e2e-podman-bin:
+	@test -x "$(CURDIR)/dist/nvim-sandbox" || (echo "built nvim-sandbox binary not found: $(CURDIR)/dist/nvim-sandbox"; exit 1)
+	NVIM_SANDBOX_BIN="$(CURDIR)/dist/nvim-sandbox" ./tests/e2e_podman.sh
 
 test-e2e-apple-container: build
 	$(MAKE) test-e2e-apple-container-bin

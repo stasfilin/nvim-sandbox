@@ -29,6 +29,7 @@ Targeted integration checks are also available:
 ```sh
 make test-install          # staged and custom-path source installs
 make test-e2e-docker       # full Docker sandbox lifecycle
+make test-e2e-podman       # full Podman sandbox lifecycle
 make test-e2e-apple-container
 ```
 
@@ -38,7 +39,7 @@ executes packages built for the CI host.
 
 CI is split into explicit dependency stages: lint, static checks, unit tests,
 and install tests run independently; successful results unlock cross-platform
-builds; Docker E2E and package assembly then run in parallel; package
-verification publishes the final artifacts only after both succeed. The release
+builds; Docker/Podman E2E and package assembly then run in parallel; package
+verification publishes the final artifacts only after all succeed. The release
 workflow separately validates the CI-approved commit before semantic-release is
 allowed to publish it.

@@ -187,13 +187,17 @@ func TestInvalidOptionsReturnUsageError(t *testing.T) {
 	}
 }
 
-func TestCreateOptionsSelectDockerRuntime(t *testing.T) {
-	opts := parse([]string{"create", "--runtime", "docker", "--no-interactive"})
-	if opts.parseError != "" {
-		t.Fatal(opts.parseError)
-	}
-	if got := opts.createOptions().Runtime; got != "docker" {
-		t.Fatalf("runtime = %q, want docker", got)
+func TestCreateOptionsSelectDockerLikeRuntime(t *testing.T) {
+	for _, runtimeName := range []string{"docker", "podman"} {
+		t.Run(runtimeName, func(t *testing.T) {
+			opts := parse([]string{"create", "--runtime", runtimeName, "--no-interactive"})
+			if opts.parseError != "" {
+				t.Fatal(opts.parseError)
+			}
+			if got := opts.createOptions().Runtime; got != runtimeName {
+				t.Fatalf("runtime = %q, want %q", got, runtimeName)
+			}
+		})
 	}
 }
 

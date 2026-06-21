@@ -8,12 +8,12 @@ type dockerLikeBackend struct {
 func (b dockerLikeBackend) Name() string { return b.name }
 
 func (b dockerLikeBackend) Build(opts ContainerOptions) error {
-	_, err := run([]string{
-		b.binary, "build", "--progress", "plain",
-		"-f", opts.Dockerfile,
-		"-t", opts.Image,
-		opts.ProjectRoot,
-	})
+	args := []string{b.binary, "build"}
+	if b.name == "docker" {
+		args = append(args, "--progress", "plain")
+	}
+	args = append(args, "-f", opts.Dockerfile, "-t", opts.Image, opts.ProjectRoot)
+	_, err := run(args)
 	return err
 }
 

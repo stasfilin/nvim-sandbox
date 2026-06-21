@@ -1,0 +1,10 @@
+{
+  "name": "nvim-sandbox-release-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "commitlint": "commitlint",
+    "release": "semantic-release"
+  },
+  "devDependencies": {}
+}

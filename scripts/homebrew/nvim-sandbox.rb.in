@@ -1,0 +1,38 @@
+class NvimSandbox < Formula
+  desc "Create project-scoped development containers for Neovim"
+  homepage "https://github.com/stasfilin/nvim-sandbox"
+  version "@VERSION@"
+  license "Apache-2.0"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v@VERSION@/nvim-sandbox_macos_arm64.tar.gz"
+      sha256 "@MACOS_ARM64_SHA256@"
+    end
+
+    on_intel do
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v@VERSION@/nvim-sandbox_macos_amd64.tar.gz"
+      sha256 "@MACOS_AMD64_SHA256@"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v@VERSION@/nvim-sandbox_linux_arm64.tar.gz"
+      sha256 "@LINUX_ARM64_SHA256@"
+    end
+
+    on_intel do
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v@VERSION@/nvim-sandbox_linux_amd64.tar.gz"
+      sha256 "@LINUX_AMD64_SHA256@"
+    end
+  end
+
+  def install
+    bin.install "nvim-sandbox"
+  end
+
+  test do
+    assert_match "nvim-sandbox #{version}", shell_output("#{bin}/nvim-sandbox version")
+  end
+end

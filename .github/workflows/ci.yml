@@ -1,0 +1,317 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  ARTIFACT_BASENAME: ${{ github.ref == 'refs/heads/main' && 'nvim-sandbox' || format('nvim-sandbox-dev-{0}', github.sha) }}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install commit message linter
+        run: npm install --no-save --no-package-lock @commitlint/cli@20.1.0 @commitlint/config-conventional@20.0.0
+
+      - name: Lint pushed commits
+        if: ${{ github.event_name == 'push' }}
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: ./scripts/lint_commits.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Lint pull request commits
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./scripts/lint_commits.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Lint pull request title
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | npx commitlint --verbose
+
+      - name: Check release configuration
+        run: node tests/release_config.mjs
+
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run static checks
+        run: make check-static
+
+  unit-tests:
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Test with race detector
+        run: make test-race
+
+  install-tests:
+    name: Install tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Test source installation
+        run: make test-install
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: [lint, static-checks, unit-tests, install-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            goos: linux
+            goarch: amd64
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+          - target: darwin-amd64
+            goos: darwin
+            goarch: amd64
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: make build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-build-${{ matrix.target }}
+          path: dist/nvim-sandbox
+          if-no-files-found: error
+          retention-days: 7
+
+  e2e-docker:
+    name: E2E (Docker)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-build-linux-amd64
+          path: dist
+
+      - name: Make binary executable
+        run: chmod +x dist/nvim-sandbox
+
+      - name: Verify Docker daemon
+        run: docker info >/dev/null
+
+      - name: Run Docker lifecycle E2E
+        run: make test-e2e-docker-bin
+
+  package:
+    name: Assemble packages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ env.ARTIFACT_BASENAME }}-build-*
+          path: build-artifacts
+
+      - name: Build release packages
+        env:
+          PACKAGE_BASENAME: ${{ env.ARTIFACT_BASENAME }}
+        run: make package-artifacts
+
+      - name: Upload package bundle for verification
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-package-bundle
+          path: release
+          if-no-files-found: error
+          retention-days: 1
+
+  package-tests:
+    name: Verify packages
+    needs: [package, e2e-docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download package bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-package-bundle
+          path: release
+
+      - name: Test release packages
+        env:
+          PACKAGE_BASENAME: ${{ env.ARTIFACT_BASENAME }}
+        run: make test-packages
+
+      - name: Write package summary
+        run: |
+          echo '## CLI packages' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          ls -lh release >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '## SHA-256 checksums' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat release/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload macOS Intel package
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/${{ env.ARTIFACT_BASENAME }}_macos_amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+      - name: Upload macOS ARM package
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/${{ env.ARTIFACT_BASENAME }}_macos_arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+      - name: Upload Linux amd64 package
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/${{ env.ARTIFACT_BASENAME }}_linux_amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+      - name: Upload Linux arm64 package
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/${{ env.ARTIFACT_BASENAME }}_linux_arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+      - name: Upload Ubuntu Debian amd64 package
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/${{ env.ARTIFACT_BASENAME }}_amd64.deb
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+      - name: Upload Ubuntu Debian arm64 package
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/${{ env.ARTIFACT_BASENAME }}_arm64.deb
+          if-no-files-found: error
+          retention-days: 14
+          archive: false
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v7
+        with:
+          path: release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+          archive: false

@@ -1,0 +1,12 @@
+.git
+.github
+.agents
+.codex
+
+coverage
+dist
+tmp
+
+*.log
+*.test
+nvim-sandbox

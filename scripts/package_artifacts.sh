@@ -35,6 +35,7 @@ package_archive() {
   mkdir -p "$package_root"
   install -m 0755 "$source_binary" "$package_root/nvim-sandbox"
   install -m 0644 "$root_dir/LICENSE" "$package_root/LICENSE"
+  install -m 0644 "$root_dir/THIRD_PARTY_NOTICES.md" "$package_root/THIRD_PARTY_NOTICES.md"
   tar -C "$stage_dir" -czf "$output_dir/$package_name.tar.gz" "$package_name"
 }
 
@@ -50,6 +51,7 @@ package_deb() {
   mkdir -p "$package_root/DEBIAN" "$package_root/usr/bin" "$package_root/usr/share/doc/nvim-sandbox"
   install -m 0755 "$source_binary" "$package_root/usr/bin/nvim-sandbox"
   install -m 0644 "$root_dir/LICENSE" "$package_root/usr/share/doc/nvim-sandbox/copyright"
+  install -m 0644 "$root_dir/THIRD_PARTY_NOTICES.md" "$package_root/usr/share/doc/nvim-sandbox/THIRD_PARTY_NOTICES.md"
   printf '%s\n' \
     'Package: nvim-sandbox' \
     "Version: $deb_version" \

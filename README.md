@@ -12,6 +12,9 @@ sandbox for it, mounts the project at `/workspace`, and opens Neovim inside the
 container. There is no Neovim plugin, project config file, or host Neovim
 installation to maintain.
 
+`nvim-sandbox` is an independent community project. It is not affiliated with,
+sponsored by, or endorsed by the Neovim project.
+
 ## Why use it?
 
 - Keep compilers, language servers, and project dependencies off the host.
@@ -394,4 +397,6 @@ Commits and pull request titles use Conventional Commits. See
 
 ## License
 
-Apache License 2.0. See [`LICENSE`](LICENSE).
+Apache License 2.0. See [`LICENSE`](LICENSE). Licenses for bundled Go
+dependencies are collected in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

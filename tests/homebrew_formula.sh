@@ -30,6 +30,7 @@ grep -Fq 'sha256 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 grep -Fq 'sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$formula"
 grep -Fq 'sha256 "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"' "$formula"
 grep -Fq 'sha256 "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"' "$formula"
+grep -Fq 'doc.install "LICENSE", "THIRD_PARTY_NOTICES.md"' "$formula"
 
 if grep -Eq '@[A-Z0-9_]+@' "$formula"; then
   echo "formula still contains template placeholders" >&2

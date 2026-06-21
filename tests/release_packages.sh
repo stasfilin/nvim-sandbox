@@ -56,8 +56,9 @@ for target in linux_amd64 linux_arm64 macos_amd64 macos_arm64; do
   tar -xzf "$archive" -C "$extract_dir"
   binary="$extract_dir/$package_name/nvim-sandbox"
   license="$extract_dir/$package_name/LICENSE"
-  if [ ! -x "$binary" ] || [ ! -s "$license" ]; then
-    echo "archive has an invalid binary or license: $archive" >&2
+  notices="$extract_dir/$package_name/THIRD_PARTY_NOTICES.md"
+  if [ ! -x "$binary" ] || [ ! -s "$license" ] || [ ! -s "$notices" ]; then
+    echo "archive has an invalid binary or license notices: $archive" >&2
     exit 1
   fi
 
@@ -92,7 +93,8 @@ if command -v dpkg-deb >/dev/null 2>&1; then
 
     dpkg-deb --extract "$package" "$extract_dir"
     binary="$extract_dir/usr/bin/nvim-sandbox"
-    if [ ! -x "$binary" ] || [ ! -s "$extract_dir/usr/share/doc/nvim-sandbox/copyright" ]; then
+    notices="$extract_dir/usr/share/doc/nvim-sandbox/THIRD_PARTY_NOTICES.md"
+    if [ ! -x "$binary" ] || [ ! -s "$extract_dir/usr/share/doc/nvim-sandbox/copyright" ] || [ ! -s "$notices" ]; then
       echo "Debian package has an invalid payload: $package" >&2
       exit 1
     fi

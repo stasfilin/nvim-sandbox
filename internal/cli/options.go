@@ -10,6 +10,7 @@ type options struct {
 	command              string
 	rest                 []string
 	format               string
+	pathDisplay          string
 	source               string
 	image                string
 	runtime              string
@@ -30,9 +31,10 @@ type options struct {
 
 func parse(args []string) options {
 	opts := options{
-		format:    "text",
-		source:    "default-image",
-		discovery: "",
+		format:      "text",
+		pathDisplay: "short",
+		source:      "default-image",
+		discovery:   "",
 	}
 	for i := 0; i < len(args); {
 		item := args[i]
@@ -47,6 +49,13 @@ func parse(args []string) options {
 		case "--json":
 			opts.format = "json"
 			i++
+		case "--path":
+			if !hasValue(args, i) {
+				opts.parseError = "missing value for --path"
+				return opts
+			}
+			opts.pathDisplay = args[i+1]
+			i += 2
 		case "--source":
 			if !hasValue(args, i) {
 				opts.parseError = "missing value for --source"
@@ -151,6 +160,9 @@ func parse(args []string) options {
 	}
 	if opts.format != "text" && opts.format != "json" {
 		opts.parseError = "invalid format: " + opts.format + " (expected text or json)"
+	}
+	if opts.pathDisplay != "short" && opts.pathDisplay != "full" {
+		opts.parseError = "invalid path display: " + opts.pathDisplay + " (expected short or full)"
 	}
 	if opts.source != "default-image" && opts.source != "dockerfile" {
 		opts.parseError = "invalid source: " + opts.source + " (expected default-image or dockerfile)"

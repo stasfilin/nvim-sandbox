@@ -123,7 +123,7 @@ func statusOrDashboard(service *app.Service, opts options, stdout io.Writer, std
 		return fail(stderr, opts, err)
 	}
 	if opts.format == "text" && !opts.noInteractive && isTerminal() {
-		result, ok, err := runDashboard(service.Config, statusValue, service.State.Base())
+		result, ok, err := runDashboard(service.Config, statusValue, service.State.Base(), opts.pathDisplay)
 		if err != nil {
 			return fail(stderr, opts, err)
 		}
@@ -415,19 +415,36 @@ func parseNetwork(rest []string) (string, string, string, error) {
 	action := "status"
 	name := ""
 	port := ""
-	if len(rest) == 0 || rest[0] == "status" {
+	if len(rest) == 0 {
 		return action, name, port, nil
 	}
 	switch rest[0] {
+	case "status":
+		if len(rest) != 1 {
+			return "", "", "", networkUsageError()
+		}
 	case "enable":
+		if len(rest) > 2 {
+			return "", "", "", networkUsageError()
+		}
 		action = "enable"
 		if len(rest) > 1 {
 			name = rest[1]
 		}
 	case "disable":
+		if len(rest) != 1 {
+			return "", "", "", networkUsageError()
+		}
 		action = "disable"
 	case "port":
-		if len(rest) == 1 || rest[1] == "list" {
+		if len(rest) == 1 {
+			action = "status"
+			break
+		}
+		if rest[1] == "list" {
+			if len(rest) != 2 {
+				return "", "", "", networkUsageError()
+			}
 			action = "status"
 			break
 		}
@@ -436,15 +453,20 @@ func parseNetwork(rest []string) (string, string, string, error) {
 		} else if rest[1] == "remove" || rest[1] == "rm" {
 			action = "port-remove"
 		} else {
-			return "", "", "", &app.Error{Kind: "invalid-usage", Message: "Unknown network command. Run `nvim-sandbox network --help`.", Code: 2}
+			return "", "", "", networkUsageError()
 		}
-		if len(rest) > 2 {
-			port = rest[2]
+		if len(rest) != 3 {
+			return "", "", "", networkUsageError()
 		}
+		port = rest[2]
 	default:
-		return "", "", "", &app.Error{Kind: "invalid-usage", Message: "Unknown network command. Run `nvim-sandbox network --help`.", Code: 2}
+		return "", "", "", networkUsageError()
 	}
 	return action, name, port, nil
+}
+
+func networkUsageError() error {
+	return &app.Error{Kind: "invalid-usage", Message: "Invalid network command. Run `nvim-sandbox help all` for usage.", Code: 2}
 }
 
 func images(service *app.Service, opts options, stdout io.Writer, stderr io.Writer) int {

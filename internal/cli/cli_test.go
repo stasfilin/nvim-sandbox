@@ -174,6 +174,8 @@ func TestInvalidOptionsReturnUsageError(t *testing.T) {
 		{"create", "--runtime"},
 		{"create", "--runtime", "lxc"},
 		{"open", "--discovery", "sometimes"},
+		{"dashboard", "--path"},
+		{"dashboard", "--path", "relative"},
 	}
 	for _, args := range tests {
 		var stdout bytes.Buffer
@@ -184,6 +186,23 @@ func TestInvalidOptionsReturnUsageError(t *testing.T) {
 		if strings.TrimSpace(stderr.String()) == "" {
 			t.Fatalf("Run(%#v) returned no usage error", args)
 		}
+	}
+}
+
+func TestDashboardPathDisplayDefaultsToShort(t *testing.T) {
+	if got := parse([]string{"dashboard"}).pathDisplay; got != "short" {
+		t.Fatalf("default path display = %q, want short", got)
+	}
+	if got := parse([]string{"dashboard", "--path", "full"}).pathDisplay; got != "full" {
+		t.Fatalf("explicit path display = %q, want full", got)
+	}
+
+	const root = "/Users/example/Developer/nvim-sandbox"
+	if got := displayProjectPath(root, "short"); got != "nvim-sandbox" {
+		t.Fatalf("short project path = %q", got)
+	}
+	if got := displayProjectPath(root, "full"); got != root {
+		t.Fatalf("full project path = %q", got)
 	}
 }
 
@@ -198,6 +217,24 @@ func TestCreateOptionsSelectDockerLikeRuntime(t *testing.T) {
 				t.Fatalf("runtime = %q, want %q", got, runtimeName)
 			}
 		})
+	}
+}
+
+func TestParseNetworkRejectsInvalidArgumentCounts(t *testing.T) {
+	tests := [][]string{
+		{"status", "unexpected"},
+		{"enable", "network-name", "unexpected"},
+		{"disable", "unexpected"},
+		{"port", "list", "unexpected"},
+		{"port", "add"},
+		{"port", "add", "3000:3000", "8080:8080"},
+		{"port", "remove"},
+	}
+
+	for _, args := range tests {
+		if _, _, _, err := parseNetwork(args); err == nil {
+			t.Fatalf("parseNetwork(%#v) returned no error", args)
+		}
 	}
 }
 

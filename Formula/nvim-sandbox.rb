@@ -30,6 +30,7 @@ class NvimSandbox < Formula
 
   def install
     bin.install "nvim-sandbox"
+    doc.install "LICENSE", "THIRD_PARTY_NOTICES.md"
   end
 
   test do

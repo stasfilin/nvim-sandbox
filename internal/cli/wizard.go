@@ -72,6 +72,7 @@ type wizardModel struct {
 	packageSelections             map[string]bool
 	editorSelections              map[string]bool
 	darkBackground                bool
+	pathDisplay                   string
 	inputError                    string
 }
 
@@ -135,8 +136,8 @@ func (m wizardModel) styles() wizardStyles {
 	return newWizardStyles(m.darkBackground)
 }
 
-func runWizard(cfg app.Config, ctx app.Context, existing *app.Metadata) (app.CreateOptions, bool, error) {
-	model, err := newWizardModel(cfg, ctx, existing)
+func runWizard(cfg app.Config, ctx app.Context, existing *app.Metadata, pathDisplay string) (app.CreateOptions, bool, error) {
+	model, err := newWizardModelWithPath(cfg, ctx, existing, pathDisplay)
 	if err != nil {
 		return app.CreateOptions{}, false, err
 	}
@@ -153,6 +154,10 @@ func runWizard(cfg app.Config, ctx app.Context, existing *app.Metadata) (app.Cre
 }
 
 func newWizardModel(cfg app.Config, ctx app.Context, existing *app.Metadata) (wizardModel, error) {
+	return newWizardModelWithPath(cfg, ctx, existing, "short")
+}
+
+func newWizardModelWithPath(cfg app.Config, ctx app.Context, existing *app.Metadata, pathDisplay string) (wizardModel, error) {
 	model := wizardModel{
 		cfg:       cfg,
 		ctx:       ctx,
@@ -164,6 +169,7 @@ func newWizardModel(cfg app.Config, ctx app.Context, existing *app.Metadata) (wi
 		},
 		defaultInstallCmd: app.DetectInstallCommand(cfg.Image),
 		darkBackground:    true,
+		pathDisplay:       pathDisplay,
 	}
 	if model.defaultInstallCmd == "" {
 		model.defaultInstallCmd = cfg.DefaultImage.InstallCommand
@@ -251,7 +257,7 @@ func (m wizardModel) View() tea.View {
 		styles.muted.Render(" > "),
 		styles.accent.Render("create"),
 	)
-	project := styles.muted.Render(m.ctx.ProjectRoot)
+	project := styles.muted.Render(displayProjectPath(m.ctx.ProjectRoot, m.pathDisplay))
 	content := lipgloss.JoinVertical(lipgloss.Left, header, project, "", body)
 	panel := styles.panel.Width(panelWidth).Render(content)
 	if m.width > panelWidth+8 {

@@ -65,11 +65,12 @@ nvim-sandbox connect
 Once the sandbox exists, `nvim-sandbox` reopens its dashboard and
 `nvim-sandbox connect` starts the container when needed.
 
-The dashboard shows the project directory name by default. Show its absolute
-path when needed:
+The dashboard and creation wizard show the project directory name by default.
+Show its absolute path when needed:
 
 ```sh
 nvim-sandbox --path full
+nvim-sandbox create --path full
 ```
 
 ## Common workflows

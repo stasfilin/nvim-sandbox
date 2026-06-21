@@ -350,7 +350,8 @@ func TestDashboardCreateNewSwitchesToWizard(t *testing.T) {
 	t.Cleanup(func() { availableRuntimes = previous })
 
 	model := dashboardModel{
-		cfg: app.DefaultConfig(),
+		cfg:         app.DefaultConfig(),
+		pathDisplay: "full",
 		status: app.Status{
 			Context:  app.Context{ProjectRoot: "/tmp/project"},
 			Metadata: &app.Metadata{},
@@ -366,6 +367,9 @@ func TestDashboardCreateNewSwitchesToWizard(t *testing.T) {
 	}
 	if updated.action != "" {
 		t.Fatalf("action = %q, want empty until wizard completes", updated.action)
+	}
+	if updated.wizard.pathDisplay != "full" {
+		t.Fatalf("wizard path display = %q, want full", updated.wizard.pathDisplay)
 	}
 }
 
@@ -385,6 +389,26 @@ func TestWizardAlwaysAsksForRuntime(t *testing.T) {
 	}
 	if model.result.Runtime != "" {
 		t.Fatalf("runtime was selected without user input: %q", model.result.Runtime)
+	}
+}
+
+func TestWizardProjectPathDisplay(t *testing.T) {
+	previous := availableRuntimes
+	availableRuntimes = func() []app.RuntimeInfo {
+		return []app.RuntimeInfo{{Name: "docker", Label: "Docker"}}
+	}
+	t.Cleanup(func() { availableRuntimes = previous })
+
+	const root = "/Users/example/Developer/nvim-sandbox"
+	model, err := newWizardModelWithPath(app.DefaultConfig(), app.Context{ProjectRoot: root}, nil, "full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.pathDisplay != "full" {
+		t.Fatalf("path display = %q, want full", model.pathDisplay)
+	}
+	if rendered := fmt.Sprint(model.View().Layer); !strings.Contains(rendered, root) {
+		t.Fatalf("wizard view does not contain full project path: %q", rendered)
 	}
 }
 

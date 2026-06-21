@@ -204,7 +204,7 @@ func create(service *app.Service, opts options, stdout io.Writer, stderr io.Writ
 			return fail(stderr, opts, err)
 		}
 		existing, _ := service.State.ReadProject(ctx.WorkspaceID)
-		wizardOpts, ok, err := runWizard(service.Config, ctx, existing)
+		wizardOpts, ok, err := runWizard(service.Config, ctx, existing, opts.pathDisplay)
 		if err != nil {
 			return fail(stderr, opts, err)
 		}

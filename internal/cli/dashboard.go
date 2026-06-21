@@ -122,7 +122,7 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m dashboardModel) applyChoice(action string) (tea.Model, tea.Cmd) {
 	switch action {
 	case "create", "new":
-		wizard, err := newWizardModel(m.cfg, m.status.Context, nil)
+		wizard, err := newWizardModelWithPath(m.cfg, m.status.Context, nil, m.pathDisplay)
 		if err != nil {
 			m.err = err
 			return m, tea.Quit

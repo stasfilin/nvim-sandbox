@@ -6,6 +6,10 @@ binary=${NVIM_SANDBOX_BIN:-"$root_dir/dist/nvim-sandbox"}
 runtime=${1:-}
 image=alpine:3.20
 
+cleanup_runtime_storage() {
+  :
+}
+
 if [ ! -x "$binary" ]; then
   echo "nvim-sandbox binary not found: $binary" >&2
   exit 1
@@ -33,6 +37,33 @@ case "$runtime" in
       docker version --format 'Docker client {{.Client.Version}}, server {{.Server.Version}}'
     }
     ;;
+  podman)
+    runtime_label=Podman
+    image=docker.io/library/alpine:3.20
+    if ! command -v podman >/dev/null 2>&1; then
+      echo "podman CLI is required" >&2
+      exit 1
+    fi
+    if ! podman info >/dev/null 2>&1; then
+      echo "Podman is not available" >&2
+      podman info
+      exit 1
+    fi
+    cleanup_container() {
+      podman rm -f "$1" >/dev/null 2>&1 || true
+    }
+    cleanup_runtime_storage() {
+      if [ "$(uname -s)" = Linux ] && [ -d "$temp_dir/data/containers" ]; then
+        podman unshare rm -rf "$temp_dir/data/containers" >/dev/null 2>&1 || true
+      fi
+    }
+    container_exists() {
+      podman inspect "$1" >/dev/null 2>&1
+    }
+    runtime_version() {
+      podman --version
+    }
+    ;;
   apple-container)
     runtime_label="Apple Container"
     if ! command -v container >/dev/null 2>&1; then
@@ -55,7 +86,7 @@ case "$runtime" in
     }
     ;;
   *)
-    echo "usage: $0 docker|apple-container" >&2
+    echo "usage: $0 docker|podman|apple-container" >&2
     exit 2
     ;;
 esac
@@ -70,6 +101,7 @@ cleanup() {
   if [ -n "$container_name" ]; then
     cleanup_container "$container_name"
   fi
+  cleanup_runtime_storage
   rm -rf "$temp_dir"
 }
 trap cleanup EXIT HUP INT TERM

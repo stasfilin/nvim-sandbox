@@ -10,8 +10,8 @@ The project is a standalone Go CLI. It does not require Lua, a Neovim plugin, or
 Supported runtimes are detected in this order:
 
 1. [Apple Container](https://github.com/apple/container)
-2. Docker
-3. Podman
+2. [Docker](https://docs.docker.com/engine/)
+3. [Podman](https://podman.io/docs/installation)
 
 ## Safety model
 
@@ -398,6 +398,7 @@ make shellcheck
 make test
 make test-race
 make test-e2e-docker
+make test-e2e-podman
 make test-e2e-apple-container
 make build
 ```
@@ -406,7 +407,7 @@ CI and release publishing are separate workflows. The CI pipeline is dependency-
 
 ```text
 commit lint ─┐
-code quality ─┼→ builds → Docker E2E → packages
+code quality ─┼→ builds → runtime E2E → packages
 tests ────────┘
 
 successful CI push to main → semantic release
@@ -416,7 +417,7 @@ successful CI push to main → semantic release
 - Code quality checks formatting, module integrity, `go vet`, and every shell script with ShellCheck.
 - Race-enabled tests run on Linux and macOS.
 - Builds produce Linux and macOS binaries for `amd64` and `arm64`.
-- Docker E2E runs on the GitHub-hosted Ubuntu Docker daemon and validates create, status, bind mounts, stop, reopen, and destroy.
+- Docker and rootless Podman E2E jobs validate create, status, bind mounts, stop, reopen, and destroy on GitHub-hosted Ubuntu runners.
 - Packaging produces platform archives, Debian packages, package manifests, and SHA-256 checksums.
 - The separate release workflow runs only after CI succeeds for a push to `main`, and publishes the exact commit validated by CI.
 

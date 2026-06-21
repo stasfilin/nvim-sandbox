@@ -199,6 +199,39 @@ jobs:
       - name: Run Docker lifecycle E2E
         run: make test-e2e-docker-bin
 
+  e2e-podman:
+    name: E2E (Podman)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-build-linux-amd64
+          path: dist
+
+      - name: Make binary executable
+        run: chmod +x dist/nvim-sandbox
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes podman uidmap slirp4netns fuse-overlayfs
+
+      - name: Configure rootless Podman
+        run: |
+          grep -q "^${USER}:" /etc/subuid || sudo usermod --add-subuids 10000-75535 "$USER"
+          grep -q "^${USER}:" /etc/subgid || sudo usermod --add-subgids 10000-75535 "$USER"
+          podman info
+
+      - name: Run Podman lifecycle E2E
+        run: make test-e2e-podman-bin
+
   package:
     name: Assemble packages
     needs: build
@@ -230,7 +263,7 @@ jobs:
 
   package-tests:
     name: Verify packages
-    needs: [package, e2e-docker]
+    needs: [package, e2e-docker, e2e-podman]
     runs-on: ubuntu-latest
     timeout-minutes: 10
 

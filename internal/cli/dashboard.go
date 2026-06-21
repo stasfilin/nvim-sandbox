@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -24,6 +25,7 @@ type dashboardModel struct {
 	create         app.CreateOptions
 	err            error
 	darkBackground bool
+	pathDisplay    string
 }
 
 type dashboardResult struct {
@@ -31,8 +33,8 @@ type dashboardResult struct {
 	create app.CreateOptions
 }
 
-func runDashboard(cfg app.Config, status app.Status, stateBase string) (dashboardResult, bool, error) {
-	model := dashboardModel{cfg: cfg, status: status, stateBase: stateBase, darkBackground: true}
+func runDashboard(cfg app.Config, status app.Status, stateBase string, pathDisplay string) (dashboardResult, bool, error) {
+	model := dashboardModel{cfg: cfg, status: status, stateBase: stateBase, darkBackground: true, pathDisplay: pathDisplay}
 	program := tea.NewProgram(model)
 	finalModel, err := program.Run()
 	if err != nil {
@@ -153,7 +155,7 @@ func (m dashboardModel) View() tea.View {
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		header,
-		styles.muted.Render(m.status.Context.ProjectRoot),
+		styles.muted.Render(displayProjectPath(m.status.Context.ProjectRoot, m.pathDisplay)),
 		"",
 		m.renderBody(),
 	)
@@ -162,6 +164,13 @@ func (m dashboardModel) View() tea.View {
 		panel = lipgloss.NewStyle().MarginLeft(2).Render(panel)
 	}
 	return tea.NewView(panel + "\n")
+}
+
+func displayProjectPath(projectRoot string, pathDisplay string) string {
+	if pathDisplay == "full" {
+		return projectRoot
+	}
+	return filepath.Base(filepath.Clean(projectRoot))
 }
 
 func (m dashboardModel) renderBody() string {

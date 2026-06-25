@@ -206,6 +206,64 @@ func TestDashboardPathDisplayDefaultsToShort(t *testing.T) {
 	}
 }
 
+func TestHumanStatusHonorsPathDisplay(t *testing.T) {
+	const root = "/Users/example/Developer/nvim-sandbox"
+	status := app.Status{
+		Context:    app.Context{ProjectRoot: root},
+		Decision:   "enabled",
+		Source:     "dockerfile",
+		Dockerfile: filepath.Join(root, "Dockerfile"),
+		Status:     "running",
+		Workspace:  "/workspace",
+		Mount:      "read-write",
+		Metadata:   &app.Metadata{},
+	}
+
+	short := humanStatus(status, "short")
+	if !strings.Contains(short, "Project:    nvim-sandbox") || strings.Contains(short, root) {
+		t.Fatalf("short status paths not applied:\n%s", short)
+	}
+	if !strings.Contains(short, "Dockerfile: Dockerfile") {
+		t.Fatalf("short Dockerfile path not applied:\n%s", short)
+	}
+
+	full := humanStatus(status, "full")
+	if !strings.Contains(full, "Project:    "+root) || !strings.Contains(full, "Dockerfile: "+filepath.Join(root, "Dockerfile")) {
+		t.Fatalf("full status paths not applied:\n%s", full)
+	}
+}
+
+func TestHumanImagesHonorsPathDisplay(t *testing.T) {
+	const project = "/Users/example/Developer/nvim-sandbox"
+	result := map[string]any{
+		"images": []app.ImageSummary{{
+			Image:    "nvim-sandbox-dev:abc123",
+			Projects: []string{project},
+		}},
+	}
+
+	short := humanImages(result, "short")
+	if !strings.Contains(short, "projects: nvim-sandbox") || strings.Contains(short, project) {
+		t.Fatalf("short image project path not applied:\n%s", short)
+	}
+
+	full := humanImages(result, "full")
+	if !strings.Contains(full, "projects: "+project) {
+		t.Fatalf("full image project path not applied:\n%s", full)
+	}
+}
+
+func TestDestroyPromptHonorsPathDisplay(t *testing.T) {
+	model := destroyPromptModel{
+		status:      app.Status{Context: app.Context{ProjectRoot: "/Users/example/Developer/nvim-sandbox"}},
+		pathDisplay: "short",
+	}
+	rendered := fmt.Sprint(model.View().Layer)
+	if !strings.Contains(rendered, "nvim-sandbox") || strings.Contains(rendered, "/Users/example/Developer") {
+		t.Fatalf("destroy prompt did not use short path:\n%s", rendered)
+	}
+}
+
 func TestCreateOptionsSelectDockerLikeRuntime(t *testing.T) {
 	for _, runtimeName := range []string{"docker", "podman"} {
 		t.Run(runtimeName, func(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/stasfilin/nvim-sandbox/internal/app"
@@ -53,9 +53,9 @@ func fail(w io.Writer, opts options, err error) int {
 	}, message)
 }
 
-func humanStatus(status app.Status) string {
+func humanStatus(status app.Status, pathDisplay string) string {
 	lines := []string{"nvim-sandbox status", ""}
-	lines = append(lines, "Project:    "+tilde(status.Context.ProjectRoot))
+	lines = append(lines, "Project:    "+displayPath(status.Context.ProjectRoot, pathDisplay))
 	lines = append(lines, "Decision:   "+status.Decision)
 	if status.Metadata == nil {
 		if status.Decision == "enabled" {
@@ -100,7 +100,7 @@ func humanStatus(status app.Status) string {
 	}
 	lines = append(lines, "Source:     "+fallback(source, "-"))
 	if status.Dockerfile != "" {
-		lines = append(lines, "Dockerfile: "+status.Dockerfile)
+		lines = append(lines, "Dockerfile: "+displayPath(status.Dockerfile, pathDisplay))
 	}
 	lines = append(lines, "Status:     "+status.Status)
 	lines = append(lines, "Workspace:  "+status.Workspace)
@@ -158,7 +158,7 @@ func humanNetwork(result map[string]any) string {
 	return strings.Join(lines, "\n")
 }
 
-func humanImages(result map[string]any) string {
+func humanImages(result map[string]any, pathDisplay string) string {
 	images, ok := result["images"].([]app.ImageSummary)
 	if !ok {
 		if raw, ok := result["images"].([]any); ok {
@@ -206,7 +206,7 @@ func humanImages(result map[string]any) string {
 			if index == 0 {
 				prefix = "  projects: "
 			}
-			lines = append(lines, prefix+project)
+			lines = append(lines, prefix+displayPath(project, pathDisplay))
 		}
 		lines = append(lines, "")
 	}
@@ -220,12 +220,14 @@ func fallback(value, fallback string) string {
 	return value
 }
 
-func tilde(path string) string {
-	home, err := os.UserHomeDir()
-	if err == nil && home != "" && strings.HasPrefix(path, home) {
-		return "~" + strings.TrimPrefix(path, home)
+func displayPath(path string, pathDisplay string) string {
+	if path == "" {
+		return path
 	}
-	return path
+	if pathDisplay == "full" {
+		return path
+	}
+	return filepath.Base(filepath.Clean(path))
 }
 
 func payloadFrom(value any) map[string]any {
@@ -337,8 +339,8 @@ func helpText(all bool) string {
 			"  --no-interactive     Disable interactive UI.",
 			"  --format json        Emit machine-readable output.",
 			"",
-			"Interactive UI:",
-			"  --path short|full    Dashboard and creation path (default: short).",
+			"Output:",
+			"  --path short|full    Display project paths as names or absolute paths (default: short).",
 			"",
 			"Network:",
 			"  network status",

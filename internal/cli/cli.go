@@ -144,7 +144,7 @@ func statusOrDashboard(service *app.Service, opts options, stdout io.Writer, std
 			return recreateExisting(service, opts, stdout, stderr)
 		}
 	}
-	text := humanStatus(statusValue)
+	text := humanStatus(statusValue, opts.pathDisplay)
 	if statusValue.Metadata == nil && opts.format != "json" && opts.noInteractive {
 		text += "\n\nRun `nvim-sandbox create` to create a sandbox for this project."
 	}
@@ -349,7 +349,7 @@ func destroy(service *app.Service, opts options, stdout io.Writer, stderr io.Wri
 			return fail(stderr, opts, err)
 		}
 		if status.Metadata != nil {
-			confirmed, err = runDestroyPrompt(status)
+			confirmed, err = runDestroyPrompt(status, opts.pathDisplay)
 			if err != nil {
 				return fail(stderr, opts, err)
 			}
@@ -371,7 +371,7 @@ func status(service *app.Service, opts options, stdout io.Writer, stderr io.Writ
 	if err != nil {
 		return fail(stderr, opts, err)
 	}
-	return respond(stdout, opts, 0, payloadFrom(result), humanStatus(result))
+	return respond(stdout, opts, 0, payloadFrom(result), humanStatus(result, opts.pathDisplay))
 }
 
 func logs(service *app.Service, opts options, stdout io.Writer, stderr io.Writer) int {
@@ -474,7 +474,7 @@ func images(service *app.Service, opts options, stdout io.Writer, stderr io.Writ
 	if err != nil {
 		return fail(stderr, opts, err)
 	}
-	return respond(stdout, opts, 0, result, humanImages(result))
+	return respond(stdout, opts, 0, result, humanImages(result, opts.pathDisplay))
 }
 
 func action(fn func() (map[string]any, error), opts options, stdout io.Writer, stderr io.Writer, text string) int {

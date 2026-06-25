@@ -753,7 +753,6 @@ func (s *Service) Images() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	home, _ := os.UserHomeDir()
 	byImage := map[string]*ImageSummary{}
 	order := []string{}
 	for _, project := range projects {
@@ -774,11 +773,7 @@ func (s *Service) Images() (map[string]any, error) {
 			byImage[project.Image] = summary
 			order = append(order, project.Image)
 		}
-		root := project.ProjectRoot
-		if home != "" && strings.HasPrefix(root, home) {
-			root = "~" + strings.TrimPrefix(root, home)
-		}
-		summary.Projects = append(summary.Projects, root)
+		summary.Projects = append(summary.Projects, project.ProjectRoot)
 	}
 	images := []ImageSummary{}
 	for _, image := range order {

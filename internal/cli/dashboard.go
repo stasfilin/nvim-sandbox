@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
@@ -167,10 +166,7 @@ func (m dashboardModel) View() tea.View {
 }
 
 func displayProjectPath(projectRoot string, pathDisplay string) string {
-	if pathDisplay == "full" {
-		return projectRoot
-	}
-	return filepath.Base(filepath.Clean(projectRoot))
+	return displayPath(projectRoot, pathDisplay)
 }
 
 func (m dashboardModel) renderBody() string {

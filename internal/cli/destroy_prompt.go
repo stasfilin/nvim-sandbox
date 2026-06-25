@@ -10,14 +10,15 @@ import (
 
 type destroyPromptModel struct {
 	status         app.Status
+	pathDisplay    string
 	cursor         int
 	darkBackground bool
 	done           bool
 	confirmed      bool
 }
 
-func runDestroyPrompt(status app.Status) (bool, error) {
-	model := destroyPromptModel{status: status, darkBackground: true}
+func runDestroyPrompt(status app.Status, pathDisplay string) (bool, error) {
+	model := destroyPromptModel{status: status, pathDisplay: pathDisplay, darkBackground: true}
 	program := tea.NewProgram(model)
 	finalModel, err := program.Run()
 	if err != nil {
@@ -63,7 +64,7 @@ func (m destroyPromptModel) View() tea.View {
 	styles := newWizardStyles(m.darkBackground)
 	rows := []string{
 		styles.title.Render("Destroy this sandbox?"),
-		styles.muted.Render(m.status.Context.ProjectRoot),
+		styles.muted.Render(displayPath(m.status.Context.ProjectRoot, m.pathDisplay)),
 	}
 	if m.status.ContainerName != "" {
 		rows = append(rows, styles.muted.Render("Container: "+m.status.ContainerName))

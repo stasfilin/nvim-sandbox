@@ -221,6 +221,7 @@ being silently discarded.
 | `images` | List managed images referenced by projects. |
 | `network` | Show or change network settings. |
 | `update` | Check GitHub for a newer release. |
+| `doctor` | Check runtime, state, project, and local dev binary health. |
 | `version` | Show the version and VCS information. |
 
 Use the built-in reference for the authoritative command set:

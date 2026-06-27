@@ -1012,6 +1012,34 @@ func TestWizardEditorToolChecklistCanAddCustomTools(t *testing.T) {
 	}
 }
 
+func TestWizardMultiSelectCanFilterChoices(t *testing.T) {
+	model := wizardModel{step: stepEditorTools}
+	model.initEditorSelections()
+
+	next, _ := model.Update(tea.KeyPressMsg(tea.Key{Text: "p"}))
+	model = next.(wizardModel)
+	next, _ = model.Update(tea.KeyPressMsg(tea.Key{Text: "y"}))
+	model = next.(wizardModel)
+
+	choices := model.filteredChoices()
+	if len(choices) != 1 || choices[0].value != "pyright" {
+		t.Fatalf("filtered choices = %#v", choices)
+	}
+	next, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}))
+	model = next.(wizardModel)
+	if !model.editorSelections["pyright"] {
+		t.Fatalf("pyright was not selected after filtered toggle: %#v", model.editorSelections)
+	}
+	if rendered := fmt.Sprint(model.View().Layer); !strings.Contains(rendered, "LSP tools (1 selected)") || !strings.Contains(rendered, "Filter:") || !strings.Contains(rendered, "pyright") {
+		t.Fatalf("filtered view missing count/filter:\n%s", rendered)
+	}
+	next, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	model = next.(wizardModel)
+	if model.cancelled || model.multiFilter != "" {
+		t.Fatalf("esc should clear filter without cancelling: cancelled=%v filter=%q", model.cancelled, model.multiFilter)
+	}
+}
+
 func TestWizardEditorToolInstallPromptCanSkipTools(t *testing.T) {
 	model := wizardModel{step: stepEditorToolsInstall, cursor: 1}
 	model.applyChoice()
@@ -1023,6 +1051,68 @@ func TestWizardEditorToolInstallPromptCanSkipTools(t *testing.T) {
 	}
 	if len(model.result.EditorTools) != 0 {
 		t.Fatalf("editor tools = %#v, want none", model.result.EditorTools)
+	}
+}
+
+func TestWizardReviewShowsCreatePlan(t *testing.T) {
+	stop := false
+	model := wizardModel{
+		ctx: app.Context{
+			ProjectRoot:   "/Users/example/project",
+			ContainerName: "sandbox-123456",
+		},
+		pathDisplay: "short",
+		result: app.CreateOptions{
+			Runtime:            "podman",
+			Source:             "default-image",
+			Image:              "ubuntu:24.04",
+			InstallPackages:    []string{"neovim", "git"},
+			NeovimVersion:      "stable",
+			InstallEditorTools: true,
+			EditorTools:        []string{"pyright"},
+			Network:            &app.Network{Enabled: true, Ports: []string{"3000:3000"}},
+			Connect:            true,
+			StopOnExit:         &stop,
+		},
+	}
+	rendered := strings.Join(model.reviewLines(), "\n")
+	for _, needle := range []string{
+		"Project: project",
+		"Runtime: Podman",
+		"LSP tools: pyright",
+		"Published ports: 3000:3000",
+		"Lifecycle: keep container running",
+	} {
+		if !strings.Contains(rendered, needle) {
+			t.Fatalf("review missing %q:\n%s", needle, rendered)
+		}
+	}
+}
+
+func TestDoctorJSONReportsRuntimeError(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"doctor", "--format", "json"}, nil, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["ok"] != false || decoded["action"] != "doctor" {
+		t.Fatalf("doctor payload = %#v", decoded)
+	}
+	checks, ok := decoded["checks"].([]any)
+	if !ok || len(checks) == 0 {
+		t.Fatalf("checks = %#v", decoded["checks"])
+	}
+	first := checks[0].(map[string]any)
+	if first["name"] != "runtime" || first["status"] != "error" {
+		t.Fatalf("first check = %#v", first)
 	}
 }
 

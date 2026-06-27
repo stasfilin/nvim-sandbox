@@ -72,6 +72,7 @@ type wizardModel struct {
 	height                        int
 	packageSelections             map[string]bool
 	editorSelections              map[string]bool
+	multiFilter                   string
 	darkBackground                bool
 	pathDisplay                   string
 	inputError                    string
@@ -207,10 +208,21 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clampCursor()
 	}
 	switch key.String() {
-	case "ctrl+c", "esc":
+	case "ctrl+c":
+		m.cancelled = true
+		return m, tea.Quit
+	case "esc":
+		if m.isMultiStep() && m.multiFilter != "" {
+			m.multiFilter = ""
+			m.clampCursor()
+			return m, nil
+		}
 		m.cancelled = true
 		return m, tea.Quit
 	case "q":
+		if m.isMultiStep() && m.multiFilter != "" {
+			return m.updateMulti(key)
+		}
 		if !m.isInputStep() {
 			m.cancelled = true
 			return m, tea.Quit
@@ -285,9 +297,18 @@ func (m wizardModel) renderBody() string {
 
 func (m wizardModel) renderMulti() string {
 	styles := m.styles()
-	question := styles.title.Render(m.choicePrompt())
-	rows := []string{question, ""}
-	for i, choice := range m.choices() {
+	question := styles.title.Render(fmt.Sprintf("%s (%d selected)", m.choicePrompt(), m.selectedCount()))
+	filter := m.multiFilter
+	if filter == "" {
+		filter = "type to filter"
+		filter = styles.placeholder.Render(filter)
+	}
+	rows := []string{question, styles.muted.Render("Filter: ") + styles.body.Render(filter), ""}
+	choices := m.filteredChoices()
+	if len(choices) == 0 {
+		rows = append(rows, styles.muted.Render("No matches."))
+	}
+	for i, choice := range choices {
 		checked := m.isSelected(choice.value)
 		box := "[ ]"
 		if checked {
@@ -301,7 +322,7 @@ func (m wizardModel) renderMulti() string {
 		}
 		rows = append(rows, prefix+label)
 	}
-	rows = append(rows, "", styles.help.Render("space: toggle  •  enter: continue  •  q, esc: quit"))
+	rows = append(rows, "", styles.help.Render("type: filter  •  backspace: edit  •  ctrl+u: clear  •  space: toggle  •  enter: continue  •  esc: clear/quit"))
 	return m.withSummary(strings.Join(rows, "\n"), false)
 }
 
@@ -404,8 +425,8 @@ func (m wizardModel) renderInstallInput() string {
 
 func (m wizardModel) renderReview() string {
 	styles := m.styles()
-	lines := []string{styles.title.Render("Review"), ""}
-	summary := m.summaryLines(true)
+	lines := []string{styles.title.Render("Create plan"), ""}
+	summary := m.reviewLines()
 	if len(summary) == 0 {
 		lines = append(lines, styles.muted.Render("No options selected. Existing sandbox will be used."))
 	} else {
@@ -641,18 +662,65 @@ func (m wizardModel) updateMulti(key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "down", "j":
-		if m.cursor < len(m.choices())-1 {
+		if m.cursor < len(m.filteredChoices())-1 {
 			m.cursor++
 		}
+	case "backspace", "ctrl+h":
+		if len(m.multiFilter) > 0 {
+			m.multiFilter = m.multiFilter[:len(m.multiFilter)-1]
+			m.clampCursor()
+		}
+	case "ctrl+u":
+		m.multiFilter = ""
+		m.clampCursor()
 	case " ", "space":
-		choices := m.choices()
+		choices := m.filteredChoices()
 		if m.cursor >= 0 && m.cursor < len(choices) {
 			m.toggleSelection(choices[m.cursor].value)
 		}
 	case "enter":
 		m.applyMulti()
+	default:
+		if text := key.Key().Text; text != "" {
+			m.multiFilter += text
+			m.clampCursor()
+		}
 	}
 	return m, nil
+}
+
+func (m wizardModel) filteredChoices() []choice {
+	choices := m.choices()
+	filter := strings.TrimSpace(strings.ToLower(m.multiFilter))
+	if filter == "" {
+		return choices
+	}
+	filtered := []choice{}
+	for _, choice := range choices {
+		if strings.Contains(strings.ToLower(choice.label), filter) || strings.Contains(strings.ToLower(choice.value), filter) {
+			filtered = append(filtered, choice)
+		}
+	}
+	return filtered
+}
+
+func (m wizardModel) selectedCount() int {
+	count := 0
+	switch m.step {
+	case stepEditorTools:
+		for _, selected := range m.editorSelections {
+			if selected {
+				count++
+			}
+		}
+	case stepPackages:
+		for _, selected := range m.packageSelections {
+			if selected {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func (m *wizardModel) toggleSelection(value string) {
@@ -963,10 +1031,12 @@ func (m *wizardModel) applyMulti() {
 		m.result.InstallEditorTools = len(m.result.EditorTools) > 0
 		if m.editorSelections["__custom__"] {
 			m.setInput("", false)
+			m.multiFilter = ""
 			m.step = stepCustomEditorTools
 			return
 		}
 		m.initPackageSelections()
+		m.multiFilter = ""
 		m.step = stepPackages
 	case stepPackages:
 		packages := []string{}
@@ -981,9 +1051,11 @@ func (m *wizardModel) applyMulti() {
 		m.result.InstallPackages = packages
 		if m.packageSelections["__custom__"] {
 			m.setInput("", false)
+			m.multiFilter = ""
 			m.step = stepCustomPackages
 			return
 		}
+		m.multiFilter = ""
 		if len(m.result.InstallPackages) > 0 {
 			m.beginInstallInput()
 		} else {
@@ -995,6 +1067,9 @@ func (m *wizardModel) applyMulti() {
 
 func (m *wizardModel) clampCursor() {
 	choices := m.choices()
+	if m.isMultiStep() {
+		choices = m.filteredChoices()
+	}
 	if len(choices) == 0 {
 		m.cursor = 0
 		return
@@ -1086,14 +1161,10 @@ func (m *wizardModel) applyPluginChoice(value string, label string) {
 func (m wizardModel) summaryLines(full bool) []string {
 	lines := []string{}
 	if m.result.Runtime != "" {
-		lines = append(lines, "Runtime: "+m.result.Runtime)
+		lines = append(lines, "Runtime: "+fallback(runtimeDisplayName(m.result.Runtime), m.result.Runtime))
 	}
 	if m.result.Source != "" {
-		source := m.result.Source
-		if m.result.Image != "" {
-			source = "custom image"
-		}
-		lines = append(lines, "Source: "+source)
+		lines = append(lines, "Source: "+m.sourceSummary())
 	}
 	if full || m.result.Image != "" {
 		if m.result.Image != "" {
@@ -1124,7 +1195,7 @@ func (m wizardModel) summaryLines(full bool) []string {
 		if len(tools) == 0 {
 			tools = []string{"gopls", "lua_ls", "rust_analyzer", "terraformls"}
 		}
-		lines = append(lines, "Editor tools: "+strings.Join(tools, ", "))
+		lines = append(lines, "LSP tools: "+strings.Join(tools, ", "))
 	}
 	if m.result.Network != nil {
 		network := "enabled"
@@ -1157,6 +1228,102 @@ func (m wizardModel) summaryLines(full bool) []string {
 		lines = append(lines, "Stop on exit: "+value)
 	}
 	return lines
+}
+
+func (m wizardModel) reviewLines() []string {
+	lines := []string{
+		"Project: " + displayProjectPath(m.ctx.ProjectRoot, m.pathDisplay),
+		"Container: " + fallback(m.ctx.ContainerName, "sandbox will be named from project"),
+	}
+	if m.result.Runtime != "" {
+		lines = append(lines, "Runtime: "+fallback(runtimeDisplayName(m.result.Runtime), m.result.Runtime))
+	}
+	if m.result.Source != "" {
+		lines = append(lines, "Source: "+m.sourceSummary())
+	}
+	if m.result.Image != "" {
+		lines = append(lines, "Image: "+m.result.Image)
+	}
+	if m.result.NeovimVersion != "" && contains(m.result.InstallPackages, "neovim") {
+		lines = append(lines, "Neovim: "+m.result.NeovimVersion)
+	}
+	if m.result.InstallCommand != "" {
+		install := m.result.InstallCommand
+		if m.result.InstallArguments != "" {
+			install += " " + m.result.InstallArguments
+		}
+		lines = append(lines, "Package manager: "+install)
+	}
+	extra := []string{}
+	for _, pkg := range app.NormalizeInstallPackages(m.result.InstallCommand, m.result.InstallPackages) {
+		if pkg != "neovim" {
+			extra = append(extra, pkg)
+		}
+	}
+	if len(extra) > 0 {
+		lines = append(lines, "Packages: "+strings.Join(extra, ", "))
+	}
+	if m.result.InstallEditorTools {
+		tools := m.result.EditorTools
+		if len(tools) == 0 {
+			tools = []string{"gopls", "lua_ls", "rust_analyzer", "terraformls"}
+		}
+		lines = append(lines, "LSP tools: "+strings.Join(tools, ", "))
+	}
+	if m.result.Network != nil {
+		network := "enabled"
+		if !m.result.Network.Enabled {
+			network = "disabled"
+		}
+		lines = append(lines, "Network: "+network)
+		ports := "none"
+		if !m.result.Network.Enabled {
+			ports = "unavailable"
+		} else if len(m.result.Network.Ports) > 0 {
+			ports = strings.Join(m.result.Network.Ports, ", ")
+		}
+		lines = append(lines, "Published ports: "+ports)
+	}
+	mounts := []string{}
+	if m.result.AttachLocalVimConfig {
+		mounts = append(mounts, "~/.config/nvim, ~/.vim, ~/.vimrc")
+	}
+	if m.result.AttachLocalNvimSite {
+		mounts = append(mounts, "~/.local/share/nvim/site")
+	}
+	if len(mounts) > 0 {
+		lines = append(lines, "Read-only mounts: "+strings.Join(mounts, "; "))
+	}
+	if m.result.PluginLabel != "" {
+		lines = append(lines, "Plugin install: "+m.result.PluginLabel)
+	}
+	if m.result.Connect {
+		lines = append(lines, "After create: connect to nvim")
+	} else {
+		lines = append(lines, "After create: return to shell")
+	}
+	if m.result.StopOnExit != nil {
+		if *m.result.StopOnExit {
+			lines = append(lines, "Lifecycle: stop container when editor exits")
+		} else {
+			lines = append(lines, "Lifecycle: keep container running")
+		}
+	}
+	return lines
+}
+
+func (m wizardModel) sourceSummary() string {
+	if m.result.Image != "" {
+		return "custom image"
+	}
+	switch m.result.Source {
+	case "default-image":
+		return "managed default image"
+	case "dockerfile":
+		return "project Dockerfile"
+	default:
+		return m.result.Source
+	}
 }
 
 func contains(values []string, needle string) bool {

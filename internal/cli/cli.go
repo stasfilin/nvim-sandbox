@@ -36,6 +36,9 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	if opts.discovery != "" {
 		cfg.Discovery.Mode = opts.discovery
 	}
+	if opts.command == "doctor" {
+		return doctorCommand(opts, stdout, stderr)
+	}
 	service, err := app.NewService(cfg)
 	if err != nil {
 		return fail(stderr, opts, err)

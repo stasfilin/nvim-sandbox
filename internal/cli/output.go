@@ -316,6 +316,7 @@ func helpText(all bool) string {
 		"  exec -- <cmd>        Run a command inside the sandbox.",
 		"  logs                 Show sandbox logs.",
 		"  network              Manage network access and published ports.",
+		"  doctor               Check runtime, state, project, and dev binary health.",
 		"  connect [-- <cmd>]   Connect with nvim or a custom interactive command.",
 		"  update               Check for a newer nvim-sandbox release.",
 		"  version              Show CLI version and VCS information.",
@@ -518,6 +519,15 @@ var commandReferences = []commandReference{
 		examples: []string{
 			"nvim-sandbox destroy",
 			"nvim-sandbox destroy --yes",
+		},
+	},
+	{
+		name:    "doctor",
+		summary: "Check runtime discovery, state writability, current project metadata, and local dev binary freshness.",
+		usage:   []string{"nvim-sandbox doctor [--json]"},
+		examples: []string{
+			"nvim-sandbox doctor",
+			"nvim-sandbox doctor --json",
 		},
 	},
 	{

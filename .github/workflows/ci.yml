@@ -199,6 +199,9 @@ jobs:
       - name: Run Docker lifecycle E2E
         run: make test-e2e-docker-bin
 
+      - name: Run Docker custom LSP tools E2E
+        run: make test-e2e-lsp-docker-bin
+
   e2e-podman:
     name: E2E (Podman)
     needs: build
@@ -231,6 +234,9 @@ jobs:
 
       - name: Run Podman lifecycle E2E
         run: make test-e2e-podman-bin
+
+      - name: Run Podman custom LSP tools E2E
+        run: make test-e2e-lsp-podman-bin
 
   package:
     name: Assemble packages

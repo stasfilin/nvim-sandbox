@@ -206,7 +206,11 @@ func styledDoctor(report doctorReport) string {
 	for _, check := range report.Checks {
 		label := styles.muted.Render(fmt.Sprintf("%-11s", check.Name+":"))
 		status := doctorStatusStyle(styles, check.Status).Render(fmt.Sprintf("%-5s", check.Status))
-		lines = append(lines, label+"  "+status+"  "+styles.body.Render(check.Message))
+		line := label + "  " + status
+		if check.Status != "ok" && check.Message != "" {
+			line += "  " + styles.body.Render(compactDoctorMessage(check.Message))
+		}
+		lines = append(lines, line)
 	}
 	result := "ok"
 	resultStyle := styles.accent
@@ -236,7 +240,11 @@ func doctorStatusStyle(styles wizardStyles, status string) interface{ Render(...
 func doctorPanelWidth(report doctorReport) int {
 	maxLine := len("nvim-sandbox > doctor")
 	for _, check := range report.Checks {
-		line := len(fmt.Sprintf("%-11s  %-5s  %s", check.Name+":", check.Status, check.Message))
+		message := ""
+		if check.Status != "ok" {
+			message = compactDoctorMessage(check.Message)
+		}
+		line := len(fmt.Sprintf("%-11s  %-5s  %s", check.Name+":", check.Status, message))
 		if line > maxLine {
 			maxLine = line
 		}
@@ -246,4 +254,16 @@ func doctorPanelWidth(report doctorReport) int {
 		return maxLine
 	}
 	return 72
+}
+
+func compactDoctorMessage(message string) string {
+	const limit = 56
+	message = strings.TrimSpace(message)
+	if len(message) <= limit {
+		return message
+	}
+	if limit <= 3 {
+		return message[:limit]
+	}
+	return message[:limit-3] + "..."
 }

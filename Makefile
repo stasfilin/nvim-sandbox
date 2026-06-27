@@ -11,8 +11,11 @@ ARTIFACT_DIR ?= build-artifacts
 RELEASE_DIR ?= release
 ARTIFACT_BASENAME ?= nvim-sandbox
 PACKAGE_BASENAME ?= nvim-sandbox_$(VERSION)
+E2E_DISTRO ?= alpine
+E2E_DISTRO_IMAGE ?= alpine:3.20
+E2E_DISTRO_INSTALL ?= apk
 
-.PHONY: build check check-static fmt fmt-check install mod-check package-artifacts shellcheck test test-e2e-apple-container test-e2e-apple-container-bin test-e2e-docker test-e2e-docker-bin test-e2e-lsp-docker test-e2e-lsp-docker-bin test-e2e-lsp-podman test-e2e-lsp-podman-bin test-e2e-podman test-e2e-podman-bin test-homebrew test-install test-notices test-packages test-race uninstall vet
+.PHONY: build check check-static fmt fmt-check install mod-check package-artifacts shellcheck test test-e2e-apple-container test-e2e-apple-container-bin test-e2e-distro-docker test-e2e-distro-docker-bin test-e2e-distro-podman test-e2e-distro-podman-bin test-e2e-docker test-e2e-docker-bin test-e2e-lsp-docker test-e2e-lsp-docker-bin test-e2e-lsp-podman test-e2e-lsp-podman-bin test-e2e-podman test-e2e-podman-bin test-homebrew test-install test-notices test-packages test-race uninstall vet
 
 build:
 	mkdir -p dist
@@ -76,6 +79,13 @@ test-e2e-lsp-docker-bin:
 	@test -x "$(CURDIR)/dist/nvim-sandbox" || (echo "built nvim-sandbox binary not found: $(CURDIR)/dist/nvim-sandbox"; exit 1)
 	NVIM_SANDBOX_BIN="$(CURDIR)/dist/nvim-sandbox" ./tests/e2e_lsp_tools.sh docker
 
+test-e2e-distro-docker: build
+	$(MAKE) test-e2e-distro-docker-bin
+
+test-e2e-distro-docker-bin:
+	@test -x "$(CURDIR)/dist/nvim-sandbox" || (echo "built nvim-sandbox binary not found: $(CURDIR)/dist/nvim-sandbox"; exit 1)
+	NVIM_SANDBOX_BIN="$(CURDIR)/dist/nvim-sandbox" ./tests/e2e_distro.sh docker "$(E2E_DISTRO)" "$(E2E_DISTRO_IMAGE)" "$(E2E_DISTRO_INSTALL)"
+
 test-e2e-podman: build
 	$(MAKE) test-e2e-podman-bin
 
@@ -89,6 +99,13 @@ test-e2e-lsp-podman: build
 test-e2e-lsp-podman-bin:
 	@test -x "$(CURDIR)/dist/nvim-sandbox" || (echo "built nvim-sandbox binary not found: $(CURDIR)/dist/nvim-sandbox"; exit 1)
 	NVIM_SANDBOX_BIN="$(CURDIR)/dist/nvim-sandbox" ./tests/e2e_lsp_tools.sh podman
+
+test-e2e-distro-podman: build
+	$(MAKE) test-e2e-distro-podman-bin
+
+test-e2e-distro-podman-bin:
+	@test -x "$(CURDIR)/dist/nvim-sandbox" || (echo "built nvim-sandbox binary not found: $(CURDIR)/dist/nvim-sandbox"; exit 1)
+	NVIM_SANDBOX_BIN="$(CURDIR)/dist/nvim-sandbox" ./tests/e2e_distro.sh podman "$(E2E_DISTRO)" "$(E2E_DISTRO_IMAGE)" "$(E2E_DISTRO_INSTALL)"
 
 test-e2e-apple-container: build
 	$(MAKE) test-e2e-apple-container-bin

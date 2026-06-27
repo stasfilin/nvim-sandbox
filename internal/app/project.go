@@ -149,6 +149,8 @@ func DefaultInstallArguments(installCommand string) string {
 		return "--no-cache"
 	case "dnf", "yum":
 		return "-y"
+	case "pacman":
+		return "--noconfirm --needed"
 	default:
 		return ""
 	}

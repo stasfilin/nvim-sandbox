@@ -202,6 +202,54 @@ jobs:
       - name: Run Docker custom LSP tools E2E
         run: make test-e2e-lsp-docker-bin
 
+  e2e-distro-docker:
+    name: E2E distro (${{ matrix.distro }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: ubuntu
+            image: ubuntu:24.04
+            install_command: apt-get
+          - distro: debian
+            image: debian:12
+            install_command: apt-get
+          - distro: fedora
+            image: fedora:latest
+            install_command: dnf
+          - distro: archlinux
+            image: archlinux:latest
+            install_command: pacman
+          - distro: alpine
+            image: alpine:3.20
+            install_command: apk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-build-linux-amd64
+          path: dist
+
+      - name: Make binary executable
+        run: chmod +x dist/nvim-sandbox
+
+      - name: Verify Docker daemon
+        run: docker info >/dev/null
+
+      - name: Run distro E2E
+        env:
+          E2E_DISTRO: ${{ matrix.distro }}
+          E2E_DISTRO_IMAGE: ${{ matrix.image }}
+          E2E_DISTRO_INSTALL: ${{ matrix.install_command }}
+        run: make test-e2e-distro-docker-bin
+
   e2e-podman:
     name: E2E (Podman)
     needs: build

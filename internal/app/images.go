@@ -49,6 +49,14 @@ func NormalizeInstallPackages(installCommand string, packages []string) []string
 			"ping":            {"iputils"},
 			"rg":              {"ripgrep"},
 		}
+	case "pacman":
+		aliases = map[string][]string{
+			"build-essential": {"base-devel"},
+			"nvim":            {"neovim"},
+			"ping":            {"iputils"},
+			"python3":         {"python"},
+			"rg":              {"ripgrep"},
+		}
 	}
 	result := make([]string, 0, len(packages))
 	for _, pkg := range packages {
@@ -296,6 +304,27 @@ func installLines(installCommand, installArguments string, packages []string, ne
 			"RUN echo 'nvim-sandbox: installing packages' \\",
 			"  && " + installCommand + " install " + installArguments + " " + strings.Join(rpmPackages, " ") + " \\",
 			"  && " + installCommand + " clean all",
+		}
+		lines = append(lines, editorToolInstallLines(editorToolNames)...)
+		return lines
+	case "pacman":
+		if installArguments == "" {
+			installArguments = DefaultInstallArguments(installCommand)
+		}
+		pacmanPackages := slices.Clone(packages)
+		if len(editorToolNames) > 0 {
+			pacmanPackages = appendMissing(pacmanPackages, "ca-certificates", "curl", "gzip", "python", "tar")
+			if hasAnyEditorTool(editorToolNames, "gopls", "terraformls") {
+				pacmanPackages = appendMissing(pacmanPackages, "git", "go")
+			}
+			if hasNPMEditorTool(editorToolNames) {
+				pacmanPackages = appendMissing(pacmanPackages, "nodejs", "npm")
+			}
+		}
+		lines := []string{
+			"RUN echo 'nvim-sandbox: installing packages' \\",
+			"  && pacman -Sy " + installArguments + " " + strings.Join(pacmanPackages, " ") + " \\",
+			"  && pacman -Scc --noconfirm",
 		}
 		lines = append(lines, editorToolInstallLines(editorToolNames)...)
 		return lines

@@ -207,13 +207,11 @@ func recreateExisting(service *app.Service, opts options, stdout io.Writer, stde
 
 func installPlugins(service *app.Service, command string, stdout io.Writer) (int, error) {
 	fmt.Fprintln(stdout, "→ Installing plugins...")
-	args, err := service.ConnectArgs([]string{"/bin/sh", "-lc", command})
-	if err != nil {
-		return 1, err
-	}
-	code := interactiveRunner(args)
-	if code != 0 {
-		return code, fmt.Errorf("plugin install failed (exit %d)", code)
+	if _, err := service.Exec(command); err != nil {
+		if appErr, ok := err.(*app.Error); ok {
+			return appErr.Code, fmt.Errorf("plugin install failed: %w", err)
+		}
+		return 1, fmt.Errorf("plugin install failed: %w", err)
 	}
 	fmt.Fprintln(stdout, "ok Plugins installed.")
 	return 0, nil

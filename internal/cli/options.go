@@ -20,6 +20,9 @@ type options struct {
 	installEditorTools   bool
 	editorTools          []string
 	attachLocalVimConfig bool
+	attachLocalNvimSite  bool
+	pluginManager        string
+	pluginInstallCommand string
 	connect              bool
 	stopOnExit           *bool
 	forceRecreate        bool
@@ -126,6 +129,26 @@ func parse(args []string) options {
 			opts.attachLocalVimConfig = true
 			opts.explicitCreateFlags = true
 			i++
+		case "--attach-local-nvim-site":
+			opts.attachLocalNvimSite = true
+			opts.explicitCreateFlags = true
+			i++
+		case "--plugin-manager":
+			if !hasValue(args, i) {
+				opts.parseError = "missing value for --plugin-manager"
+				return opts
+			}
+			opts.pluginManager = args[i+1]
+			opts.explicitCreateFlags = true
+			i += 2
+		case "--plugin-install-command":
+			if !hasValue(args, i) {
+				opts.parseError = "missing value for --plugin-install-command"
+				return opts
+			}
+			opts.pluginInstallCommand = args[i+1]
+			opts.explicitCreateFlags = true
+			i += 2
 		case "--connect":
 			opts.connect = true
 			i++
@@ -187,6 +210,18 @@ func parse(args []string) options {
 	if opts.discovery != "" && opts.discovery != "never" && opts.discovery != "ask" && opts.discovery != "auto" {
 		opts.parseError = "invalid discovery mode: " + opts.discovery + " (expected never, ask, or auto)"
 	}
+	if opts.pluginManager != "" {
+		normalized := normalizePluginManagerName(opts.pluginManager)
+		if normalized == "custom" {
+			if strings.TrimSpace(opts.pluginInstallCommand) == "" {
+				opts.parseError = "custom plugin manager requires --plugin-install-command"
+			}
+		} else if _, ok := pluginManagerByName(normalized); !ok {
+			opts.parseError = "invalid plugin manager: " + opts.pluginManager + " (expected native-pack, lazy.nvim, packer.nvim, vim-plug, or custom)"
+		} else {
+			opts.pluginManager = normalized
+		}
+	}
 	return opts
 }
 
@@ -208,7 +243,7 @@ func splitList(value string) []string {
 }
 
 func (o options) createOptions() app.CreateOptions {
-	return app.CreateOptions{
+	createOpts := app.CreateOptions{
 		Source:               o.source,
 		Image:                o.image,
 		Runtime:              o.runtime,
@@ -218,10 +253,27 @@ func (o options) createOptions() app.CreateOptions {
 		InstallEditorTools:   o.installEditorTools,
 		EditorTools:          o.editorTools,
 		AttachLocalVimConfig: o.attachLocalVimConfig,
+		AttachLocalNvimSite:  o.attachLocalNvimSite,
 		Connect:              o.connect,
 		StopOnExit:           o.stopOnExit,
 		ForceRecreate:        o.forceRecreate,
 	}
+	if o.pluginManager != "" {
+		if normalizePluginManagerName(o.pluginManager) == "custom" {
+			createOpts.PluginInstallCommand = strings.TrimSpace(o.pluginInstallCommand)
+			createOpts.PluginLabel = "custom"
+		} else if manager, ok := pluginManagerByName(o.pluginManager); ok {
+			createOpts.PluginInstallCommand = manager.Command
+			createOpts.PluginLabel = manager.Label
+			if manager.AttachLocalNvimSite {
+				createOpts.AttachLocalNvimSite = true
+			}
+		}
+	} else if strings.TrimSpace(o.pluginInstallCommand) != "" {
+		createOpts.PluginInstallCommand = strings.TrimSpace(o.pluginInstallCommand)
+		createOpts.PluginLabel = "custom"
+	}
+	return createOpts
 }
 
 func (o options) positionalError() string {

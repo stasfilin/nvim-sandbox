@@ -250,6 +250,42 @@ jobs:
           E2E_DISTRO_INSTALL: ${{ matrix.install_command }}
         run: make test-e2e-distro-docker-bin
 
+  e2e-plugin-docker:
+    name: E2E plugin manager (${{ matrix.plugin_manager }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin_manager:
+          - native-pack
+          - lazy.nvim
+          - packer.nvim
+          - vim-plug
+          - custom
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ARTIFACT_BASENAME }}-build-linux-amd64
+          path: dist
+
+      - name: Make binary executable
+        run: chmod +x dist/nvim-sandbox
+
+      - name: Verify Docker daemon
+        run: docker info >/dev/null
+
+      - name: Run plugin manager E2E
+        env:
+          E2E_PLUGIN_MANAGER: ${{ matrix.plugin_manager }}
+        run: make test-e2e-plugin-docker-bin
+
   e2e-podman:
     name: E2E (Podman)
     needs: build

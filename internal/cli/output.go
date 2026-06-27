@@ -61,12 +61,16 @@ func humanStatus(status app.Status, pathDisplay string) string {
 		if status.Decision == "enabled" {
 			lines = append(lines, "Status:     recovery needed")
 			lines = append(lines, "Next:       nvim-sandbox create --recreate")
+		} else if status.Decision == "ignored" {
+			lines = append(lines, "Status:     disabled")
+			lines = append(lines, "Next:       nvim-sandbox reset")
 		} else {
 			lines = append(lines, "Status:     no sandbox")
+			lines = append(lines, "Next:       nvim-sandbox create")
 		}
 		return strings.Join(lines, "\n")
 	}
-	lines = append(lines, "Runtime:    "+fallback(status.Runtime, "-"))
+	lines = append(lines, "Runtime:    "+fallback(runtimeDisplayName(status.Runtime), fallback(status.Runtime, "-")))
 	lines = append(lines, "Container:  "+status.ContainerName)
 	lines = append(lines, "Image:      "+fallback(status.Image, "-"))
 	if status.Metadata.BaseImage != "" {
@@ -105,7 +109,7 @@ func humanStatus(status app.Status, pathDisplay string) string {
 	lines = append(lines, "Status:     "+status.Status)
 	lines = append(lines, "Workspace:  "+status.Workspace)
 	lines = append(lines, "Mount:      "+status.Mount)
-	lines = append(lines, "Stop Exit:  "+yesNo(status.StopOnExit))
+	lines = append(lines, "Stop on Exit: "+yesNo(status.StopOnExit))
 	network := status.Metadata.Network
 	networkText := "default"
 	if !network.Enabled {
@@ -119,6 +123,20 @@ func humanStatus(status app.Status, pathDisplay string) string {
 	}
 	lines = append(lines, "Created At: "+fallback(status.CreatedAt, "-"))
 	lines = append(lines, "Last Used:  "+fallback(status.LastUsedAt, "-"))
+	lines = append(lines, "Next:       nvim-sandbox connect")
+	return strings.Join(lines, "\n")
+}
+
+func readyText(metadata *app.Metadata) string {
+	if metadata == nil {
+		return "sandbox ready"
+	}
+	lines := []string{
+		"sandbox ready: " + metadata.ContainerName,
+		"Runtime:       " + fallback(runtimeDisplayName(metadata.Runtime), fallback(metadata.Runtime, "-")),
+		"Image:         " + fallback(metadata.Image, "-"),
+		"Next:          nvim-sandbox connect",
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -279,7 +297,7 @@ func stringFromMap(values map[string]any, key string) string {
 }
 
 func usage() string {
-	return "usage: nvim-sandbox <command> [--format json]\nRun `nvim-sandbox help` to list commands."
+	return "usage: nvim-sandbox [command] [options]\nRun `nvim-sandbox help` to list commands."
 }
 
 func helpText(all bool) string {
@@ -287,9 +305,9 @@ func helpText(all bool) string {
 		"nvim-sandbox",
 		"",
 		"Usage:",
-		"  nvim-sandbox                 Show current project status",
-		"  nvim-sandbox <command>       Run a command",
-		"  nvim-sandbox <command> --format json",
+		"  nvim-sandbox                       Open the dashboard in a terminal; otherwise print status.",
+		"  nvim-sandbox <command> [options]   Run a command.",
+		"  nvim-sandbox help <command>        Show command-specific help.",
 		"",
 		"Commands:",
 		"  create               Create a sandbox for the current project.",
@@ -298,6 +316,7 @@ func helpText(all bool) string {
 		"  exec -- <cmd>        Run a command inside the sandbox.",
 		"  logs                 Show sandbox logs.",
 		"  network              Manage network access and published ports.",
+		"  doctor               Check runtime, state, project, and dev binary health.",
 		"  connect [-- <cmd>]   Connect with nvim or a custom interactive command.",
 		"  update               Check for a newer nvim-sandbox release.",
 		"  version              Show CLI version and VCS information.",
@@ -330,6 +349,7 @@ func helpText(all bool) string {
 			"  --install-command    Package manager command (for example: dnf).",
 			"  --install-args       Package manager flags (for example: -y).",
 			"  --install-lsp        Install common editor tools.",
+			"  --lsp-tools <list>   Install selected built-in or npm LSP tools.",
 			"  --attach-local-vim-config",
 			"                       Mount local editor config read-only.",
 			"  --connect            Connect after creation.",
@@ -341,6 +361,7 @@ func helpText(all bool) string {
 			"",
 			"Output:",
 			"  --path short|full    Display project paths as names or absolute paths (default: short).",
+			"  --json               Shorthand for --format json.",
 			"",
 			"Network:",
 			"  network status",
@@ -366,4 +387,291 @@ func helpText(all bool) string {
 		"  nvim-sandbox update",
 	)
 	return strings.Join(lines, "\n")
+}
+
+type commandReference struct {
+	name     string
+	summary  string
+	usage    []string
+	options  []string
+	examples []string
+	aliases  []string
+}
+
+var commandReferences = []commandReference{
+	{
+		name:    "create",
+		summary: "Create or recreate the current project's sandbox.",
+		usage: []string{
+			"nvim-sandbox create [options]",
+			"nvim-sandbox create --connect [-- <cmd>]",
+		},
+		options: []string{
+			"--runtime auto|apple-container|docker|podman",
+			"--dockerfile",
+			"--image <image>",
+			"--install <a,b,c>",
+			"--install-command <cmd>",
+			"--install-args <args>",
+			"--install-lsp",
+			"--lsp-tools <list>",
+			"--attach-local-vim-config",
+			"--connect",
+			"--keep-running",
+			"--recreate",
+			"--no-interactive",
+		},
+		examples: []string{
+			"nvim-sandbox create",
+			"nvim-sandbox create --runtime docker --image ubuntu:24.04",
+			"nvim-sandbox create --lsp-tools pyright,bash-language-server,npm:@tailwindcss/language-server",
+			"nvim-sandbox create --dockerfile --install-lsp --connect",
+		},
+		aliases: []string{"create-dockerfile", "enable"},
+	},
+	{
+		name:    "dashboard",
+		summary: "Open the interactive project dashboard in a terminal.",
+		usage:   []string{"nvim-sandbox", "nvim-sandbox dashboard"},
+		examples: []string{
+			"nvim-sandbox",
+			"nvim-sandbox dashboard --path full",
+		},
+	},
+	{
+		name:    "connect",
+		summary: "Open Neovim, or run another interactive command, inside the sandbox.",
+		usage: []string{
+			"nvim-sandbox connect",
+			"nvim-sandbox connect -- <cmd>",
+			"nvim-sandbox shell",
+		},
+		examples: []string{
+			"nvim-sandbox connect",
+			"nvim-sandbox connect -- nvim +'checkhealth'",
+			"nvim-sandbox shell",
+		},
+		aliases: []string{"open", "attach", "shell"},
+	},
+	{
+		name:    "stop",
+		summary: "Stop the current project's sandbox container.",
+		usage:   []string{"nvim-sandbox stop"},
+	},
+	{
+		name:    "restart",
+		summary: "Restart the current project's sandbox container.",
+		usage:   []string{"nvim-sandbox restart"},
+	},
+	{
+		name:    "disable",
+		summary: "Mark the current project ignored by nvim-sandbox.",
+		usage:   []string{"nvim-sandbox disable"},
+	},
+	{
+		name:    "reset",
+		summary: "Remove the saved project decision.",
+		usage:   []string{"nvim-sandbox reset"},
+	},
+	{
+		name:    "exec",
+		summary: "Run a non-interactive command in /workspace.",
+		usage:   []string{"nvim-sandbox exec -- <cmd>"},
+		examples: []string{
+			"nvim-sandbox exec -- go test ./...",
+			"nvim-sandbox exec -- npm test",
+		},
+	},
+	{
+		name:    "status",
+		summary: "Show saved metadata and live runtime state for the current project.",
+		usage:   []string{"nvim-sandbox status [--json] [--path short|full]"},
+		examples: []string{
+			"nvim-sandbox status",
+			"nvim-sandbox status --json",
+			"nvim-sandbox status --path full",
+		},
+	},
+	{
+		name:    "network",
+		summary: "Show or change network access and published ports.",
+		usage: []string{
+			"nvim-sandbox network status",
+			"nvim-sandbox network enable [name]",
+			"nvim-sandbox network disable",
+			"nvim-sandbox network port add <host:container>",
+			"nvim-sandbox network port remove <host:container>",
+		},
+		examples: []string{
+			"nvim-sandbox network enable",
+			"nvim-sandbox network port add 3000:3000",
+			"nvim-sandbox network port remove 3000:3000",
+		},
+	},
+	{
+		name:    "destroy",
+		summary: "Remove the current project's sandbox container and metadata.",
+		usage:   []string{"nvim-sandbox destroy [--yes]"},
+		options: []string{
+			"--yes, -y",
+			"--no-interactive",
+		},
+		examples: []string{
+			"nvim-sandbox destroy",
+			"nvim-sandbox destroy --yes",
+		},
+	},
+	{
+		name:    "doctor",
+		summary: "Check runtime discovery, state writability, current project metadata, and local dev binary freshness.",
+		usage:   []string{"nvim-sandbox doctor [--json]"},
+		examples: []string{
+			"nvim-sandbox doctor",
+			"nvim-sandbox doctor --json",
+		},
+	},
+	{
+		name:    "runtime",
+		summary: "Show the selected runtime and every detected runtime.",
+		usage:   []string{"nvim-sandbox runtime [--json]"},
+		examples: []string{
+			"nvim-sandbox runtime",
+			"nvim-sandbox runtime --json",
+		},
+	},
+	{
+		name:    "images",
+		summary: "List managed images referenced by saved projects.",
+		usage:   []string{"nvim-sandbox images [--path short|full]"},
+	},
+	{
+		name:    "logs",
+		summary: "Show sandbox logs for the current project.",
+		usage:   []string{"nvim-sandbox logs"},
+	},
+	{
+		name:    "update",
+		summary: "Check GitHub Releases for a newer nvim-sandbox version.",
+		usage:   []string{"nvim-sandbox update [--json]"},
+	},
+	{
+		name:    "version",
+		summary: "Show the CLI version and VCS information.",
+		usage:   []string{"nvim-sandbox version [--json]"},
+		aliases: []string{"--version", "-v"},
+	},
+}
+
+func commandHelpText(topic string) (string, bool) {
+	ref, ok := commandReferenceFor(topic)
+	if !ok {
+		return "", false
+	}
+	lines := []string{"nvim-sandbox " + ref.name, "", ref.summary, "", "Usage:"}
+	for _, usageLine := range ref.usage {
+		lines = append(lines, "  "+usageLine)
+	}
+	if len(ref.aliases) > 0 {
+		lines = append(lines, "", "Aliases:")
+		for _, alias := range ref.aliases {
+			lines = append(lines, "  "+alias)
+		}
+	}
+	if len(ref.options) > 0 {
+		lines = append(lines, "", "Options:")
+		for _, option := range ref.options {
+			lines = append(lines, "  "+option)
+		}
+	}
+	if len(ref.examples) > 0 {
+		lines = append(lines, "", "Examples:")
+		for _, example := range ref.examples {
+			lines = append(lines, "  "+example)
+		}
+	}
+	lines = append(lines, "", "Global options:", "  --format json, --json", "  --path short|full")
+	return strings.Join(lines, "\n"), true
+}
+
+func commandReferenceFor(topic string) (commandReference, bool) {
+	for _, ref := range commandReferences {
+		if ref.name == topic {
+			return ref, true
+		}
+		for _, alias := range ref.aliases {
+			if alias == topic {
+				return ref, true
+			}
+		}
+	}
+	return commandReference{}, false
+}
+
+func unknownCommandUsage(command string) string {
+	lines := []string{"unknown command: " + command}
+	if suggestion := suggestCommand(command); suggestion != "" {
+		lines = append(lines, "Did you mean `nvim-sandbox "+suggestion+"`?")
+	}
+	lines = append(lines, "", usage())
+	return strings.Join(lines, "\n")
+}
+
+func unknownHelpTopicUsage(topic string) string {
+	lines := []string{"unknown help topic: " + topic}
+	if suggestion := suggestCommand(topic); suggestion != "" {
+		lines = append(lines, "Did you mean `nvim-sandbox help "+suggestion+"`?")
+	}
+	lines = append(lines, "", "Run `nvim-sandbox help` to list commands.")
+	return strings.Join(lines, "\n")
+}
+
+func suggestCommand(input string) string {
+	best := ""
+	bestDistance := 4
+	for _, candidate := range knownCommands() {
+		distance := levenshtein(input, candidate)
+		if distance < bestDistance {
+			best = candidate
+			bestDistance = distance
+		}
+	}
+	return best
+}
+
+func knownCommands() []string {
+	commands := []string{"help"}
+	for _, ref := range commandReferences {
+		commands = append(commands, ref.name)
+		commands = append(commands, ref.aliases...)
+	}
+	return commands
+}
+
+func levenshtein(a string, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return len(b)
+	}
+	if b == "" {
+		return len(a)
+	}
+	previous := make([]int, len(b)+1)
+	current := make([]int, len(b)+1)
+	for j := range previous {
+		previous[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		current[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			current[j] = min(previous[j]+1, current[j-1]+1, previous[j-1]+cost)
+		}
+		previous, current = current, previous
+	}
+	return previous[len(b)]
 }

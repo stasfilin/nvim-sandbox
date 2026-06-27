@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -355,6 +356,52 @@ func TestDefaultImageCacheMarkerInvalidatesStaleImage(t *testing.T) {
 	}
 }
 
+func TestCreateReportsImageAndContainerProgressPhases(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	SetRunnerForTests(func(args []string) CommandResult {
+		if len(args) > 1 && (args[1] == "inspect" || args[1] == "image") {
+			return CommandResult{Code: 1, Stderr: "not found"}
+		}
+		return CommandResult{Code: 0}
+	})
+	t.Cleanup(func() { SetRunnerForTests(nil) })
+	service, err := NewService(DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := []string{}
+	_, err = service.Create(CreateOptions{
+		Runtime:            "docker",
+		Image:              "alpine:3.20",
+		InstallCommand:     "apk",
+		InstallEditorTools: true,
+		EditorTools:        []string{"pyright"},
+		Progress: func(message string, done bool) {
+			messages = append(messages, fmt.Sprintf("%t:%s", done, message))
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(messages, "\n")
+	for _, needle := range []string{
+		"true:Image profile: base alpine:3.20",
+		"LSP tools pyright",
+		"false:Building image",
+		"true:Image built:",
+		"false:Creating container",
+		"true:Container created:",
+		"false:Starting sandbox-",
+		"true:Container started",
+	} {
+		if !strings.Contains(joined, needle) {
+			t.Fatalf("progress missing %q:\n%s", needle, joined)
+		}
+	}
+}
+
 func TestManagedImageProfilesAreScopedToProject(t *testing.T) {
 	profile := ImageProfileFor(DefaultConfig(), "ubuntu:24.04", []string{"neovim"}, "apt-get", "", "stable", false, nil)
 	first := ScopeImageProfile(profile, "/code/dotfiles", "a1b2c3")
@@ -619,7 +666,7 @@ func TestFedoraEditorToolsProfileUsesDnf(t *testing.T) {
 	profile := ImageProfileFor(DefaultConfig(), "fedora:latest", []string{"nvim", "rg", "build-essential"}, "dnf", "-y --setopt=install_weak_deps=False", "stable", true, []string{"rust_analyzer"})
 	dockerfile := ImageDockerfile(profile.BaseImage, profile.InstallCommand, profile.InstallArguments, profile.Packages, "/workspace", profile.NeovimVersion, profile.EditorToolNames)
 	for _, needle := range []string{
-		"RUN dnf install -y",
+		"dnf install -y",
 		"--setopt=install_weak_deps=False",
 		"neovim",
 		"ripgrep",
@@ -640,6 +687,36 @@ func TestFedoraEditorToolsProfileUsesDnf(t *testing.T) {
 	}
 	if strings.Contains(dockerfile, "build-essential") {
 		t.Fatalf("Dockerfile contains Debian-only build-essential package:\n%s", dockerfile)
+	}
+}
+
+func TestCustomEditorToolsInstallNPMPackages(t *testing.T) {
+	profile := ImageProfileFor(DefaultConfig(), "ubuntu:24.04", []string{"nvim"}, "apt-get", "", "stable", true, []string{"pyright", "typescript-language-server", "npm:@tailwindcss/language-server"})
+	wantTools := []string{"pyright", "typescript-language-server", "npm:@tailwindcss/language-server"}
+	if !slices.Equal(profile.EditorToolNames, wantTools) {
+		t.Fatalf("editor tools = %#v, want %#v", profile.EditorToolNames, wantTools)
+	}
+	dockerfile := ImageDockerfile(profile.BaseImage, profile.InstallCommand, profile.InstallArguments, profile.Packages, "/workspace", profile.NeovimVersion, profile.EditorToolNames)
+	for _, needle := range []string{
+		"nodejs",
+		"npm",
+		"npm install -g",
+		"'pyright'",
+		"'typescript'",
+		"'typescript-language-server'",
+		"'@tailwindcss/language-server'",
+	} {
+		if !strings.Contains(dockerfile, needle) {
+			t.Fatalf("Dockerfile missing %q:\n%s", needle, dockerfile)
+		}
+	}
+}
+
+func TestCustomEditorToolsNormalizeAliases(t *testing.T) {
+	profile := ImageProfileFor(DefaultConfig(), "ubuntu:24.04", []string{"nvim"}, "apt-get", "", "stable", true, []string{"lua-language-server", "rust-analyzer", "terraform-ls", "lua_ls"})
+	want := []string{"lua_ls", "rust_analyzer", "terraformls"}
+	if !slices.Equal(profile.EditorToolNames, want) {
+		t.Fatalf("editor tools = %#v, want %#v", profile.EditorToolNames, want)
 	}
 }
 

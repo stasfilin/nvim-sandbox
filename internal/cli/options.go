@@ -18,6 +18,7 @@ type options struct {
 	installCommand       string
 	installArguments     string
 	installEditorTools   bool
+	editorTools          []string
 	attachLocalVimConfig bool
 	connect              bool
 	stopOnExit           *bool
@@ -112,6 +113,15 @@ func parse(args []string) options {
 			opts.installEditorTools = true
 			opts.explicitCreateFlags = true
 			i++
+		case "--editor-tools", "--lsp-tools", "--lsps":
+			if !hasValue(args, i) {
+				opts.parseError = "missing value for " + item
+				return opts
+			}
+			opts.editorTools = splitList(args[i+1])
+			opts.installEditorTools = true
+			opts.explicitCreateFlags = true
+			i += 2
 		case "--attach-local-vim-config", "--attach-local-nvim-config", "--atach-local-vim-config":
 			opts.attachLocalVimConfig = true
 			opts.explicitCreateFlags = true
@@ -151,6 +161,10 @@ func parse(args []string) options {
 			i = len(args)
 		default:
 			if opts.command == "" {
+				if strings.HasPrefix(item, "-") && item != "--help" && item != "-h" && item != "--version" && item != "-v" {
+					opts.parseError = "unknown option: " + item
+					return opts
+				}
 				opts.command = item
 			} else {
 				opts.rest = append(opts.rest, item)
@@ -202,7 +216,7 @@ func (o options) createOptions() app.CreateOptions {
 		InstallCommand:       o.installCommand,
 		InstallArguments:     o.installArguments,
 		InstallEditorTools:   o.installEditorTools,
-		EditorTools:          nil,
+		EditorTools:          o.editorTools,
 		AttachLocalVimConfig: o.attachLocalVimConfig,
 		Connect:              o.connect,
 		StopOnExit:           o.stopOnExit,
@@ -215,8 +229,17 @@ func (o options) positionalError() string {
 		return ""
 	}
 	switch o.command {
-	case "", "create", "connect", "exec", "network", "help", "--help", "-h":
+	case "", "connect", "exec", "network", "help", "--help", "-h":
 		return ""
+	case "create":
+		if o.connect {
+			return ""
+		}
+		return "unexpected argument for create: " + o.rest[0]
+	case "create-dockerfile", "enable":
+		return "unexpected argument for " + o.command + ": " + o.rest[0]
+	case "open", "attach", "shell":
+		return "unexpected argument for " + o.command + ": " + o.rest[0]
 	default:
 		return "unexpected argument for " + o.command + ": " + o.rest[0]
 	}

@@ -286,7 +286,7 @@ func (s *Service) Create(opts CreateOptions) (*Metadata, error) {
 		}
 	}
 
-	progress("Creating container "+ctx.ContainerName, false)
+	progress("Creating container "+ctx.ContainerName+" from "+metadata.Image, false)
 	if err := backend.Create(backendOpts); err != nil {
 		if strings.Contains(err.Error(), "exists") || strings.Contains(err.Error(), "already exists") {
 			if err := s.ensureStarted(backend, backendOpts, "", progress); err != nil {
@@ -296,7 +296,7 @@ func (s *Service) Create(opts CreateOptions) (*Metadata, error) {
 		}
 		return nil, &Error{Kind: "create-failed", Message: err.Error(), Code: 1}
 	}
-	progress("Container created", true)
+	progress("Container created: "+ctx.ContainerName, true)
 	if err := s.ensureStarted(backend, backendOpts, "stopped", progress); err != nil {
 		return nil, &Error{Kind: "start-failed", Message: err.Error(), Code: 1}
 	}

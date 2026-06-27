@@ -29,9 +29,15 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			"dirty":   info.Dirty,
 		}, versionText(info))
 	}
+	if opts.command == "help" || opts.command == "--help" || opts.command == "-h" {
+		return help(opts, stdout, stderr)
+	}
 	cfg := app.DefaultConfig()
 	if opts.discovery != "" {
 		cfg.Discovery.Mode = opts.discovery
+	}
+	if opts.command == "doctor" {
+		return doctorCommand(opts, stdout, stderr)
 	}
 	service, err := app.NewService(cfg)
 	if err != nil {
@@ -43,8 +49,6 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return connect(service, opts, stdout, stderr)
 		}
 		return statusOrDashboard(service, opts, stdout, stderr)
-	case "help", "--help", "-h":
-		return respond(stdout, opts, 0, map[string]any{"action": "help"}, helpText(len(opts.rest) > 0 && opts.rest[0] == "all"))
 	case "create":
 		return create(service, opts, stdout, stderr)
 	case "create-dockerfile":
@@ -85,8 +89,27 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	case "update":
 		return updateCommand(service.State.Base(), opts, stdout, stderr)
 	default:
-		return respond(stderr, opts, 2, map[string]any{"error": "usage", "message": usage()}, usage())
+		text := unknownCommandUsage(opts.command)
+		return respond(stderr, opts, 2, map[string]any{"error": "usage", "message": text}, text)
 	}
+}
+
+func help(opts options, stdout io.Writer, stderr io.Writer) int {
+	if len(opts.rest) == 0 {
+		return respond(stdout, opts, 0, map[string]any{"action": "help"}, helpText(false))
+	}
+	if len(opts.rest) > 1 {
+		text := "usage: nvim-sandbox help [all|command]"
+		return respond(stderr, opts, 2, map[string]any{"error": "usage", "message": text}, text)
+	}
+	if opts.rest[0] == "all" {
+		return respond(stdout, opts, 0, map[string]any{"action": "help", "topic": "all"}, helpText(true))
+	}
+	if text, ok := commandHelpText(opts.rest[0]); ok {
+		return respond(stdout, opts, 0, map[string]any{"action": "help", "topic": opts.rest[0]}, text)
+	}
+	text := unknownHelpTopicUsage(opts.rest[0])
+	return respond(stderr, opts, 2, map[string]any{"error": "usage", "message": text}, text)
 }
 
 func updateCommand(stateBase string, opts options, stdout io.Writer, stderr io.Writer) int {
@@ -173,7 +196,7 @@ func recreateExisting(service *app.Service, opts options, stdout io.Writer, stde
 		return fail(stderr, opts, err)
 	}
 	if !connectNow {
-		return respond(stdout, opts, 0, map[string]any{"action": "recreated", "metadata": metadata}, "sandbox ready: "+metadata.ContainerName)
+		return respond(stdout, opts, 0, map[string]any{"action": "recreated", "metadata": metadata}, readyText(metadata))
 	}
 	args, err := service.ConnectArgs([]string{"nvim"})
 	if err != nil {
@@ -257,7 +280,7 @@ func createWithOptions(service *app.Service, opts options, createOpts app.Create
 		}
 		return runConnection(service, args, app.ShouldStopOnExit(metadata), stdout, stderr)
 	}
-	return respond(stdout, opts, 0, map[string]any{"action": "created", "metadata": metadata}, "sandbox ready: "+metadata.ContainerName)
+	return respond(stdout, opts, 0, map[string]any{"action": "created", "metadata": metadata}, readyText(metadata))
 }
 
 func open(service *app.Service, opts options, stdout io.Writer, stderr io.Writer) int {
@@ -272,7 +295,7 @@ func open(service *app.Service, opts options, stdout io.Writer, stderr io.Writer
 	}
 	text := fmt.Sprint(result["action"])
 	if metadata, ok := result["metadata"].(*app.Metadata); ok {
-		text = "sandbox ready: " + metadata.ContainerName
+		text = readyText(metadata)
 	}
 	return respond(stdout, opts, 0, result, text)
 }
@@ -466,7 +489,7 @@ func parseNetwork(rest []string) (string, string, string, error) {
 }
 
 func networkUsageError() error {
-	return &app.Error{Kind: "invalid-usage", Message: "Invalid network command. Run `nvim-sandbox help all` for usage.", Code: 2}
+	return &app.Error{Kind: "invalid-usage", Message: "Invalid network command.\n\nRun `nvim-sandbox help network` for usage.", Code: 2}
 }
 
 func images(service *app.Service, opts options, stdout io.Writer, stderr io.Writer) int {
@@ -486,10 +509,44 @@ func action(fn func() (map[string]any, error), opts options, stdout io.Writer, s
 }
 
 func runtimeText(value map[string]any) string {
-	if runtimeName, ok := value["runtime"].(string); ok && runtimeName != "" {
-		return "Runtime: " + runtimeName
+	runtimeName, _ := value["runtime"].(string)
+	available := runtimeInfosFromAny(value["available"])
+	lines := []string{}
+	if runtimeName != "" {
+		lines = append(lines, "Runtime:   "+fallback(runtimeDisplayName(runtimeName), runtimeName))
+	} else {
+		lines = append(lines, "Runtime:   none")
 	}
-	return "Runtime: none"
+	if len(available) == 0 {
+		lines = append(lines, "Available: none", "Next:      install Apple Container, Docker, or Podman")
+		return strings.Join(lines, "\n")
+	}
+	labels := []string{}
+	for _, runtime := range available {
+		labels = append(labels, runtime.Label)
+	}
+	lines = append(lines, "Available: "+strings.Join(labels, ", "))
+	return strings.Join(lines, "\n")
+}
+
+func runtimeInfosFromAny(value any) []app.RuntimeInfo {
+	switch typed := value.(type) {
+	case []app.RuntimeInfo:
+		return typed
+	case []any:
+		runtimes := []app.RuntimeInfo{}
+		for _, item := range typed {
+			itemMap := mapFromAny(item)
+			name := stringFromMap(itemMap, "name")
+			label := stringFromMap(itemMap, "label")
+			if name != "" || label != "" {
+				runtimes = append(runtimes, app.RuntimeInfo{Name: name, Label: fallback(label, name)})
+			}
+		}
+		return runtimes
+	default:
+		return nil
+	}
 }
 
 func isTerminal() bool {

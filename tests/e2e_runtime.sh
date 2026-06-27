@@ -5,6 +5,7 @@ root_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 binary=${NVIM_SANDBOX_BIN:-"$root_dir/dist/nvim-sandbox"}
 runtime=${1:-}
 image=alpine:3.20
+lsp_tools=${NVIM_SANDBOX_E2E_LSP_TOOLS:-}
 
 cleanup_runtime_storage() {
   :
@@ -116,24 +117,44 @@ echo "CLI: $("$binary" version)"
 echo "Runtime: $(runtime_version)"
 echo "Fixture: $project_dir"
 echo "Image: $image"
+if [ -n "$lsp_tools" ]; then
+  echo "LSP tools: $lsp_tools"
+fi
 echo "Creating $runtime sandbox..."
-create_json=$(
-  "$binary" create \
-    --runtime "$runtime" \
-    --image "$image" \
-    --keep-running \
-    --no-interactive \
-    --format json
-)
+if [ -n "$lsp_tools" ]; then
+  create_json=$(
+    "$binary" create \
+      --runtime "$runtime" \
+      --image "$image" \
+      --install-command apk \
+      --lsp-tools "$lsp_tools" \
+      --keep-running \
+      --no-interactive \
+      --format json
+  )
+else
+  create_json=$(
+    "$binary" create \
+      --runtime "$runtime" \
+      --image "$image" \
+      --keep-running \
+      --no-interactive \
+      --format json
+  )
+fi
 container_name=$(printf '%s' "$create_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["metadata"]["container_name"])')
 echo "Container: $container_name"
-printf '%s' "$create_json" | E2E_RUNTIME="$runtime" E2E_IMAGE="$image" E2E_PROJECT="$project_dir" python3 -c '
+printf '%s' "$create_json" | E2E_RUNTIME="$runtime" E2E_IMAGE="$image" E2E_PROJECT="$project_dir" E2E_LSP_TOOLS="$lsp_tools" python3 -c '
 import json, os, sys
 data = json.load(sys.stdin)
 assert data["ok"] is True
 assert data["action"] == "created"
 assert data["metadata"]["runtime"] == os.environ["E2E_RUNTIME"]
-assert data["metadata"]["image"] == os.environ["E2E_IMAGE"]
+if os.environ["E2E_LSP_TOOLS"]:
+    assert data["metadata"]["base_image"] == os.environ["E2E_IMAGE"]
+    assert data["metadata"]["editor_tools"] == os.environ["E2E_LSP_TOOLS"].split(",")
+else:
+    assert data["metadata"]["image"] == os.environ["E2E_IMAGE"]
 assert data["metadata"]["project_root"] == os.environ["E2E_PROJECT"]
 '
 
@@ -154,6 +175,18 @@ if [ ! -f "$project_dir/e2e-marker" ]; then
   exit 1
 fi
 echo "Mount: $project_dir -> /workspace (read-write)"
+
+if [ -n "$lsp_tools" ]; then
+  echo "Checking LSP tools..."
+  pyright_json=$("$binary" exec --format json -- pyright --version)
+  printf '%s' "$pyright_json" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+assert data["ok"] is True
+assert "pyright" in data["output"].lower()
+'
+  echo "LSP tool: pyright available"
+fi
 
 echo "Stopping and reopening sandbox..."
 "$binary" stop --format json >/dev/null

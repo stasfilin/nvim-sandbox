@@ -56,6 +56,7 @@ func TestDetectInstallCommandFromImageName(t *testing.T) {
 		"rockylinux/rocky:9":       "dnf",
 		"alpine:3.20":              "apk",
 		"centos:stream9":           "yum",
+		"archlinux:latest":         "pacman",
 	}
 	for image, want := range tests {
 		if got := DetectInstallCommand(image); got != want {
@@ -70,6 +71,7 @@ func TestDefaultInstallArguments(t *testing.T) {
 		"apk":     "--no-cache",
 		"dnf":     "-y",
 		"yum":     "-y",
+		"pacman":  "--noconfirm --needed",
 		"custom":  "",
 	}
 	for command, want := range tests {
@@ -690,6 +692,25 @@ func TestFedoraEditorToolsProfileUsesDnf(t *testing.T) {
 	}
 }
 
+func TestArchEditorToolsProfileUsesPacman(t *testing.T) {
+	profile := ImageProfileFor(DefaultConfig(), "archlinux:latest", []string{"nvim", "rg", "build-essential"}, "pacman", "", "stable", true, []string{"pyright"})
+	dockerfile := ImageDockerfile(profile.BaseImage, profile.InstallCommand, profile.InstallArguments, profile.Packages, "/workspace", profile.NeovimVersion, profile.EditorToolNames)
+	for _, needle := range []string{
+		"pacman -Sy --noconfirm --needed",
+		"neovim",
+		"ripgrep",
+		"base-devel",
+		"nodejs",
+		"npm",
+		"npm install -g 'pyright'",
+		"pacman -Scc --noconfirm",
+	} {
+		if !strings.Contains(dockerfile, needle) {
+			t.Fatalf("Dockerfile missing %q:\n%s", needle, dockerfile)
+		}
+	}
+}
+
 func TestCustomEditorToolsInstallNPMPackages(t *testing.T) {
 	profile := ImageProfileFor(DefaultConfig(), "ubuntu:24.04", []string{"nvim"}, "apt-get", "", "stable", true, []string{"pyright", "typescript-language-server", "npm:@tailwindcss/language-server"})
 	wantTools := []string{"pyright", "typescript-language-server", "npm:@tailwindcss/language-server"}
@@ -729,10 +750,12 @@ func TestPortableBuildPackageAliases(t *testing.T) {
 		{command: "apt-get", packages: []string{"build-essential"}, want: []string{"build-essential"}},
 		{command: "apk", packages: []string{"build-essential"}, want: []string{"build-base"}},
 		{command: "dnf", packages: []string{"build-essential"}, want: []string{"gcc", "gcc-c++", "make"}},
+		{command: "pacman", packages: []string{"build-essential"}, want: []string{"base-devel"}},
 		{command: "yum", packages: []string{"build-essential", "gcc"}, want: []string{"gcc", "gcc-c++", "make"}},
 		{command: "apt-get", packages: []string{"curl", "ping"}, want: []string{"curl", "iputils-ping"}},
 		{command: "apk", packages: []string{"curl", "ping"}, want: []string{"curl", "iputils"}},
 		{command: "dnf", packages: []string{"curl", "ping"}, want: []string{"curl", "iputils"}},
+		{command: "pacman", packages: []string{"nvim", "rg", "python3"}, want: []string{"neovim", "ripgrep", "python"}},
 	}
 	for _, test := range tests {
 		t.Run(test.command, func(t *testing.T) {

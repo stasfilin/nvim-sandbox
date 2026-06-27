@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const imageProfileVersion = "4"
+const imageProfileVersion = "5"
 
 type ImageProfile struct {
 	Name             string
@@ -205,6 +205,9 @@ func installLines(installCommand, installArguments string, packages []string, ne
 			if hasAnyEditorTool(editorToolNames, "gopls", "terraformls") {
 				requiredPackages = append(requiredPackages, "git", "golang-go")
 			}
+			if hasNPMEditorTool(editorToolNames) {
+				requiredPackages = append(requiredPackages, "nodejs", "npm")
+			}
 			for _, required := range requiredPackages {
 				if !slices.Contains(aptPackages, required) {
 					aptPackages = append(aptPackages, required)
@@ -251,6 +254,9 @@ func installLines(installCommand, installArguments string, packages []string, ne
 			if hasAnyEditorTool(editorToolNames, "gopls", "terraformls") {
 				apkPackages = appendMissing(apkPackages, "git", "go")
 			}
+			if hasNPMEditorTool(editorToolNames) {
+				apkPackages = appendMissing(apkPackages, "nodejs", "npm")
+			}
 		}
 		lines := []string{"RUN apk add " + installArguments + " " + strings.Join(apkPackages, " ")}
 		lines = append(lines, editorToolInstallLines(editorToolNames)...)
@@ -264,6 +270,9 @@ func installLines(installCommand, installArguments string, packages []string, ne
 			rpmPackages = appendMissing(rpmPackages, "ca-certificates", "curl", "gzip", "python3", "tar")
 			if hasAnyEditorTool(editorToolNames, "gopls", "terraformls") {
 				rpmPackages = appendMissing(rpmPackages, "git", "golang")
+			}
+			if hasNPMEditorTool(editorToolNames) {
+				rpmPackages = appendMissing(rpmPackages, "nodejs", "npm")
 			}
 		}
 		lines := []string{
@@ -295,6 +304,9 @@ func editorToolInstallLines(editorToolNames []string) []string {
 		return nil
 	}
 	lines := []string{}
+	if invalid := invalidEditorTools(editorToolNames); len(invalid) > 0 {
+		return []string{"RUN echo 'nvim-sandbox editor tools contain invalid package names: " + strings.Join(invalid, ", ") + "' >&2; exit 1"}
+	}
 	if hasEditorTool(editorToolNames, "gopls") {
 		lines = append(lines,
 			"",
@@ -337,6 +349,17 @@ func editorToolInstallLines(editorToolNames []string) []string {
 			"  rm -f /tmp/rust-analyzer.gz",
 		)
 	}
+	if packages := npmEditorToolPackages(editorToolNames); len(packages) > 0 {
+		quoted := []string{}
+		for _, pkg := range packages {
+			quoted = append(quoted, shellQuote(pkg))
+		}
+		lines = append(lines,
+			"",
+			"RUN set -eux; \\",
+			"  npm install -g "+strings.Join(quoted, " "),
+		)
+	}
 	return lines
 }
 
@@ -345,21 +368,36 @@ func normalizeEditorTools(enabled bool, names []string) []string {
 		return nil
 	}
 	if len(names) == 0 {
-		return []string{"gopls", "lua_ls", "rust_analyzer", "terraformls"}
-	}
-	allowed := map[string]bool{
-		"gopls":         true,
-		"lua_ls":        true,
-		"rust_analyzer": true,
-		"terraformls":   true,
+		return defaultEditorTools()
 	}
 	normalized := []string{}
 	for _, name := range names {
-		if allowed[name] && !slices.Contains(normalized, name) {
+		name = normalizeEditorToolName(name)
+		if name != "" && !slices.Contains(normalized, name) {
 			normalized = append(normalized, name)
 		}
 	}
 	return normalized
+}
+
+func defaultEditorTools() []string {
+	return []string{"gopls", "lua_ls", "rust_analyzer", "terraformls"}
+}
+
+func normalizeEditorToolName(name string) string {
+	name = strings.TrimSpace(name)
+	switch name {
+	case "":
+		return ""
+	case "lua-language-server":
+		return "lua_ls"
+	case "rust-analyzer":
+		return "rust_analyzer"
+	case "terraform-ls":
+		return "terraformls"
+	default:
+		return name
+	}
 }
 
 func hasEditorTool(names []string, needle string) bool {
@@ -373,4 +411,84 @@ func hasAnyEditorTool(names []string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+func hasNPMEditorTool(names []string) bool {
+	return len(npmEditorToolPackages(names)) > 0
+}
+
+func npmEditorToolPackages(names []string) []string {
+	packages := []string{}
+	for _, name := range names {
+		for _, pkg := range npmPackagesForEditorTool(name) {
+			packages = appendMissing(packages, pkg)
+		}
+	}
+	return packages
+}
+
+func npmPackagesForEditorTool(name string) []string {
+	switch {
+	case name == "pyright":
+		return []string{"pyright"}
+	case name == "bash-language-server":
+		return []string{"bash-language-server"}
+	case name == "typescript-language-server":
+		return []string{"typescript", "typescript-language-server"}
+	case name == "vscode-langservers-extracted":
+		return []string{"vscode-langservers-extracted"}
+	case name == "yaml-language-server":
+		return []string{"yaml-language-server"}
+	case strings.HasPrefix(name, "npm:"):
+		pkg := strings.TrimPrefix(name, "npm:")
+		if pkg == "" {
+			return nil
+		}
+		return []string{pkg}
+	default:
+		if isBuiltinEditorTool(name) {
+			return nil
+		}
+		return []string{name}
+	}
+}
+
+func invalidEditorTools(names []string) []string {
+	invalid := []string{}
+	for _, name := range names {
+		for _, pkg := range npmPackagesForEditorTool(name) {
+			if !validNPMPackageSpec(pkg) {
+				invalid = append(invalid, name)
+				break
+			}
+		}
+	}
+	return invalid
+}
+
+func isBuiltinEditorTool(name string) bool {
+	switch name {
+	case "gopls", "lua_ls", "rust_analyzer", "terraformls":
+		return true
+	default:
+		return false
+	}
+}
+
+func validNPMPackageSpec(value string) bool {
+	if value == "" || strings.HasPrefix(value, "-") {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		switch r {
+		case '@', '/', '.', '_', '-', '+', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }

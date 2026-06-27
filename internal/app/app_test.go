@@ -643,6 +643,36 @@ func TestFedoraEditorToolsProfileUsesDnf(t *testing.T) {
 	}
 }
 
+func TestCustomEditorToolsInstallNPMPackages(t *testing.T) {
+	profile := ImageProfileFor(DefaultConfig(), "ubuntu:24.04", []string{"nvim"}, "apt-get", "", "stable", true, []string{"pyright", "typescript-language-server", "npm:@tailwindcss/language-server"})
+	wantTools := []string{"pyright", "typescript-language-server", "npm:@tailwindcss/language-server"}
+	if !slices.Equal(profile.EditorToolNames, wantTools) {
+		t.Fatalf("editor tools = %#v, want %#v", profile.EditorToolNames, wantTools)
+	}
+	dockerfile := ImageDockerfile(profile.BaseImage, profile.InstallCommand, profile.InstallArguments, profile.Packages, "/workspace", profile.NeovimVersion, profile.EditorToolNames)
+	for _, needle := range []string{
+		"nodejs",
+		"npm",
+		"npm install -g",
+		"'pyright'",
+		"'typescript'",
+		"'typescript-language-server'",
+		"'@tailwindcss/language-server'",
+	} {
+		if !strings.Contains(dockerfile, needle) {
+			t.Fatalf("Dockerfile missing %q:\n%s", needle, dockerfile)
+		}
+	}
+}
+
+func TestCustomEditorToolsNormalizeAliases(t *testing.T) {
+	profile := ImageProfileFor(DefaultConfig(), "ubuntu:24.04", []string{"nvim"}, "apt-get", "", "stable", true, []string{"lua-language-server", "rust-analyzer", "terraform-ls", "lua_ls"})
+	want := []string{"lua_ls", "rust_analyzer", "terraformls"}
+	if !slices.Equal(profile.EditorToolNames, want) {
+		t.Fatalf("editor tools = %#v, want %#v", profile.EditorToolNames, want)
+	}
+}
+
 func TestPortableBuildPackageAliases(t *testing.T) {
 	tests := []struct {
 		command  string

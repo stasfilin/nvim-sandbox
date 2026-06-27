@@ -31,6 +31,7 @@ const (
 	stepNeovim
 	stepEditorToolsInstall
 	stepEditorTools
+	stepCustomEditorTools
 	stepPackages
 	stepCustomPackages
 	stepInstallCommand
@@ -504,6 +505,12 @@ func (m wizardModel) choices() []choice {
 			{label: "lua_ls", value: "lua_ls"},
 			{label: "rust_analyzer", value: "rust_analyzer"},
 			{label: "terraformls", value: "terraformls"},
+			{label: "pyright", value: "pyright"},
+			{label: "bash-language-server", value: "bash-language-server"},
+			{label: "typescript-language-server", value: "typescript-language-server"},
+			{label: "vscode-langservers-extracted", value: "vscode-langservers-extracted"},
+			{label: "yaml-language-server", value: "yaml-language-server"},
+			{label: "Custom npm tools...", value: "__custom__"},
 		}
 	case stepPackages:
 		return []choice{
@@ -552,11 +559,11 @@ func (m wizardModel) choicePrompt() string {
 	case stepNetwork:
 		return "Network access"
 	case stepEditorToolsInstall:
-		return "Install common LSP tools?"
+		return "Install LSP tools?"
 	case stepNeovimInstall:
 		return "Install Neovim?"
 	case stepEditorTools:
-		return "Common LSP tools"
+		return "LSP tools"
 	case stepPackages:
 		if m.result.Source == "dockerfile" {
 			return "Dockerfile packages"
@@ -579,7 +586,7 @@ func (m wizardModel) choicePrompt() string {
 
 func (m wizardModel) isInputStep() bool {
 	switch m.step {
-	case stepImage, stepNeovim, stepCustomPackages, stepInstallCommand, stepPorts:
+	case stepImage, stepNeovim, stepCustomEditorTools, stepCustomPackages, stepInstallCommand, stepPorts:
 		return true
 	case stepPluginCustomCommand:
 		return true
@@ -599,6 +606,8 @@ func (m wizardModel) inputPrompt() string {
 			return "Dockerfile custom packages"
 		}
 		return "Custom packages (comma separated)"
+	case stepCustomEditorTools:
+		return "Custom LSP tools (comma separated; npm package names)"
 	case stepInstallCommand:
 		return "Install command"
 	case stepPorts:
@@ -888,6 +897,13 @@ func (m *wizardModel) applyInput() {
 			m.result.InstallPackages = append([]string{"neovim"}, m.result.InstallPackages...)
 		}
 		m.step = stepEditorToolsInstall
+	case stepCustomEditorTools:
+		for _, tool := range splitList(value) {
+			m.result.EditorTools = append(m.result.EditorTools, tool)
+		}
+		m.result.InstallEditorTools = len(m.result.EditorTools) > 0
+		m.initPackageSelections()
+		m.step = stepPackages
 	case stepPackages:
 		m.applyMulti()
 	case stepCustomPackages:
@@ -945,6 +961,11 @@ func (m *wizardModel) applyMulti() {
 	case stepEditorTools:
 		m.result.EditorTools = m.selectedEditorTools()
 		m.result.InstallEditorTools = len(m.result.EditorTools) > 0
+		if m.editorSelections["__custom__"] {
+			m.setInput("", false)
+			m.step = stepCustomEditorTools
+			return
+		}
 		m.initPackageSelections()
 		m.step = stepPackages
 	case stepPackages:
@@ -992,10 +1013,16 @@ func (m *wizardModel) initEditorSelections() {
 		return
 	}
 	m.editorSelections = map[string]bool{
-		"gopls":         false,
-		"lua_ls":        false,
-		"rust_analyzer": false,
-		"terraformls":   false,
+		"gopls":                        false,
+		"lua_ls":                       false,
+		"rust_analyzer":                false,
+		"terraformls":                  false,
+		"pyright":                      false,
+		"bash-language-server":         false,
+		"typescript-language-server":   false,
+		"vscode-langservers-extracted": false,
+		"yaml-language-server":         false,
+		"__custom__":                   false,
 	}
 }
 
@@ -1016,7 +1043,7 @@ func (m *wizardModel) initPackageSelections() {
 }
 
 func (m wizardModel) selectedEditorTools() []string {
-	order := []string{"gopls", "lua_ls", "rust_analyzer", "terraformls"}
+	order := []string{"gopls", "lua_ls", "rust_analyzer", "terraformls", "pyright", "bash-language-server", "typescript-language-server", "vscode-langservers-extracted", "yaml-language-server"}
 	selected := []string{}
 	for _, tool := range order {
 		if m.editorSelections[tool] {

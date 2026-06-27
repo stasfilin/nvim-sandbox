@@ -242,6 +242,7 @@ nvim-sandbox help all
 | `--install-command <cmd>` | Set the package manager or a raw install command. |
 | `--install-args <args>` | Set package-manager flags. |
 | `--install-lsp` | Install the common editor-tool profile. |
+| `--lsp-tools <list>` | Install selected built-in tools or npm LSP packages. |
 | `--attach-local-vim-config` | Mount existing editor configuration read-only. |
 | `--connect` | Connect after creation. |
 | `--stop-on-exit` | Stop the container when the editor exits. |
@@ -254,6 +255,16 @@ Known package aliases are translated for supported package managers. For
 example, `nvim` becomes `neovim`, `rg` becomes `ripgrep`, and
 `build-essential` becomes `build-base` on Alpine or `gcc gcc-c++ make` with
 DNF/YUM.
+
+`--lsp-tools` accepts the built-in tools `gopls`, `lua_ls`, `rust_analyzer`,
+and `terraformls`, plus npm-distributed tools such as `pyright`,
+`bash-language-server`, `typescript-language-server`,
+`vscode-langservers-extracted`, and `yaml-language-server`. Custom npm package
+names can be passed directly or with `npm:`:
+
+```sh
+nvim-sandbox create --lsp-tools pyright,npm:@tailwindcss/language-server
+```
 
 ### Network and ports
 

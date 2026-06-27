@@ -101,6 +101,31 @@ func TestVersionAliasesDoNotRequireProjectState(t *testing.T) {
 	}
 }
 
+func TestHelpDoesNotRequireProjectState(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/dev/null")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if code := Run([]string{"help", "create"}, nil, &stdout, &stderr); code != 0 {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "nvim-sandbox create") || !strings.Contains(stdout.String(), "--runtime auto|apple-container|docker|podman") {
+		t.Fatalf("help output = %q", stdout.String())
+	}
+}
+
+func TestHelpUnknownTopicSuggestsCommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if code := Run([]string{"help", "statuz"}, nil, &stdout, &stderr); code != 2 {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown help topic: statuz") || !strings.Contains(stderr.String(), "nvim-sandbox help status") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestVersionJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -176,6 +201,8 @@ func TestInvalidOptionsReturnUsageError(t *testing.T) {
 		{"open", "--discovery", "sometimes"},
 		{"dashboard", "--path"},
 		{"dashboard", "--path", "relative"},
+		{"--bogus"},
+		{"create", "--bogus"},
 	}
 	for _, args := range tests {
 		var stdout bytes.Buffer
@@ -186,6 +213,19 @@ func TestInvalidOptionsReturnUsageError(t *testing.T) {
 		if strings.TrimSpace(stderr.String()) == "" {
 			t.Fatalf("Run(%#v) returned no usage error", args)
 		}
+	}
+}
+
+func TestUnknownCommandSuggestsClosestMatch(t *testing.T) {
+	withProject(t)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	if code := Run([]string{"statuz"}, nil, &stdout, &stderr); code != 2 {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown command: statuz") || !strings.Contains(stderr.String(), "nvim-sandbox status") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
@@ -211,6 +251,7 @@ func TestHumanStatusHonorsPathDisplay(t *testing.T) {
 	status := app.Status{
 		Context:    app.Context{ProjectRoot: root},
 		Decision:   "enabled",
+		Runtime:    "podman",
 		Source:     "dockerfile",
 		Dockerfile: filepath.Join(root, "Dockerfile"),
 		Status:     "running",
@@ -226,10 +267,25 @@ func TestHumanStatusHonorsPathDisplay(t *testing.T) {
 	if !strings.Contains(short, "Dockerfile: Dockerfile") {
 		t.Fatalf("short Dockerfile path not applied:\n%s", short)
 	}
+	if !strings.Contains(short, "Runtime:    Podman") || !strings.Contains(short, "Stop on Exit: no") {
+		t.Fatalf("status labels not rendered cleanly:\n%s", short)
+	}
 
 	full := humanStatus(status, "full")
 	if !strings.Contains(full, "Project:    "+root) || !strings.Contains(full, "Dockerfile: "+filepath.Join(root, "Dockerfile")) {
 		t.Fatalf("full status paths not applied:\n%s", full)
+	}
+}
+
+func TestHumanStatusForUnknownProjectShowsNextAction(t *testing.T) {
+	status := app.Status{
+		Context:  app.Context{ProjectRoot: "/Users/example/project"},
+		Decision: "unknown",
+		Status:   "-",
+	}
+	rendered := humanStatus(status, "short")
+	if !strings.Contains(rendered, "Status:     no sandbox") || !strings.Contains(rendered, "Next:       nvim-sandbox create") {
+		t.Fatalf("status did not include next action:\n%s", rendered)
 	}
 }
 
@@ -250,6 +306,35 @@ func TestHumanImagesHonorsPathDisplay(t *testing.T) {
 	full := humanImages(result, "full")
 	if !strings.Contains(full, "projects: "+project) {
 		t.Fatalf("full image project path not applied:\n%s", full)
+	}
+}
+
+func TestReadyTextShowsNextAction(t *testing.T) {
+	rendered := readyText(&app.Metadata{
+		Runtime:       "podman",
+		ContainerName: "sandbox-123456",
+		Image:         "nvim-sandbox-default:abc123",
+	})
+	if !strings.Contains(rendered, "sandbox ready: sandbox-123456") || !strings.Contains(rendered, "Runtime:       Podman") || !strings.Contains(rendered, "Next:          nvim-sandbox connect") {
+		t.Fatalf("ready text = %q", rendered)
+	}
+}
+
+func TestRuntimeTextShowsDetectedAndAvailableRuntimes(t *testing.T) {
+	rendered := runtimeText(map[string]any{
+		"runtime": "docker",
+		"available": []app.RuntimeInfo{
+			{Name: "docker", Label: "Docker"},
+			{Name: "podman", Label: "Podman"},
+		},
+	})
+	if !strings.Contains(rendered, "Runtime:   Docker") || !strings.Contains(rendered, "Available: Docker, Podman") {
+		t.Fatalf("runtime text = %q", rendered)
+	}
+
+	missing := runtimeText(map[string]any{"runtime": "", "available": []app.RuntimeInfo{}})
+	if !strings.Contains(missing, "Runtime:   none") || !strings.Contains(missing, "Next:      install Apple Container, Docker, or Podman") {
+		t.Fatalf("missing runtime text = %q", missing)
 	}
 }
 
@@ -634,6 +719,18 @@ func TestParseInstallArgumentsFlag(t *testing.T) {
 	}
 }
 
+func TestParseCustomLSPToolsFlag(t *testing.T) {
+	opts := parse([]string{"create", "--lsp-tools", "pyright,npm:@tailwindcss/language-server"})
+	createOpts := opts.createOptions()
+	if !createOpts.InstallEditorTools {
+		t.Fatal("--lsp-tools did not enable editor tools")
+	}
+	want := []string{"pyright", "npm:@tailwindcss/language-server"}
+	if !slices.Equal(createOpts.EditorTools, want) {
+		t.Fatalf("editor tools = %#v, want %#v", createOpts.EditorTools, want)
+	}
+}
+
 func TestParseStopOnExitFlags(t *testing.T) {
 	keepRunning := parse([]string{"create", "--keep-running"}).createOptions()
 	if keepRunning.StopOnExit == nil || *keepRunning.StopOnExit {
@@ -892,6 +989,26 @@ func TestWizardEditorToolChecklistCanDisableOneTool(t *testing.T) {
 	}
 	if len(model.result.EditorTools) != 1 || model.result.EditorTools[0] != "gopls" {
 		t.Fatalf("editor tools = %#v, want only gopls", model.result.EditorTools)
+	}
+}
+
+func TestWizardEditorToolChecklistCanAddCustomTools(t *testing.T) {
+	model := wizardModel{step: stepEditorTools}
+	model.initEditorSelections()
+	model.toggleSelection("pyright")
+	model.toggleSelection("__custom__")
+	model.applyMulti()
+	if model.step != stepCustomEditorTools {
+		t.Fatalf("step = %v, want stepCustomEditorTools", model.step)
+	}
+	model.input = "npm:@tailwindcss/language-server"
+	model.applyInput()
+	want := []string{"pyright", "npm:@tailwindcss/language-server"}
+	if model.step != stepPackages {
+		t.Fatalf("step = %v, want stepPackages", model.step)
+	}
+	if !model.result.InstallEditorTools || !slices.Equal(model.result.EditorTools, want) {
+		t.Fatalf("editor tools enabled=%v tools=%#v, want %#v", model.result.InstallEditorTools, model.result.EditorTools, want)
 	}
 }
 

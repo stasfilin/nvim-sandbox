@@ -31,7 +31,7 @@ var pluginManagers = []pluginManagerDefinition{
 	{
 		Name:    "vim-plug",
 		Label:   "vim-plug",
-		Command: `nvim --headless "+PlugInstall --sync" +qall`,
+		Command: `nvim --headless -c 'PlugInstall --sync' -c 'qa'`,
 	},
 }
 

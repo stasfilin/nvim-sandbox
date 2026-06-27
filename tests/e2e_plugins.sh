@@ -146,23 +146,17 @@ LUA
 }
 
 write_vim_plug_config() {
-  cat >"$home_dir/.config/nvim/init.lua" <<'LUA'
-local plug_path = vim.fn.stdpath("data") .. "/site/autoload/plug.vim"
-if vim.fn.empty(vim.fn.glob(plug_path)) > 0 then
-  vim.fn.system({
-    "sh",
-    "-c",
-    "mkdir -p " .. vim.fn.shellescape(vim.fn.fnamemodify(plug_path, ":h")) ..
-      " && curl -fLo " .. vim.fn.shellescape(plug_path) ..
-      " https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim",
-  })
-end
-vim.cmd([[
+  cat >"$home_dir/.config/nvim/init.vim" <<'VIM'
+let s:plug_path = stdpath('data') . '/site/autoload/plug.vim'
+if empty(glob(s:plug_path))
+  call mkdir(fnamemodify(s:plug_path, ':h'), 'p')
+  call system(['curl', '-fLo', s:plug_path, 'https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim'])
+endif
+execute 'source' fnameescape(s:plug_path)
 call plug#begin(stdpath('data') . '/plugged')
 Plug 'tpope/vim-sleuth'
 call plug#end()
-]])
-LUA
+VIM
 }
 
 prepare_manager() {
@@ -209,6 +203,26 @@ expected_path() {
       printf '%s\n' /root/.local/share/nvim/site/pack/custom/start/vim-sleuth/plugin/sleuth.vim
       ;;
   esac
+}
+
+exec_json() {
+  command=$1
+  output=$("$binary" exec --format json -- "$command" 2>&1) || {
+    printf '%s\n' "$output" >&2
+    return 1
+  }
+  printf '%s\n' "$output"
+}
+
+assert_exec_ok() {
+  command=$1
+  output=$(exec_json "$command") || return 1
+  printf '%s' "$output" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert data["ok"] is True'
+}
+
+dump_plugin_tree() {
+  echo "Installed plugin files:" >&2
+  exec_json "find /root/.local/share/nvim -maxdepth 6 -type f | sort" >&2 || true
 }
 
 cd "$project_dir"
@@ -270,8 +284,14 @@ else:
 
 plugin_path=$(expected_path)
 echo "Checking installed plugin: $plugin_path"
-"$binary" exec --format json -- test -f "$plugin_path" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert data["ok"] is True'
-"$binary" exec --format json -- "nvim --headless '+packloadall' '+if empty(globpath(&runtimepath, \"plugin/sleuth.vim\")) | cquit | endif' +qa" | python3 -c 'import json,sys; data=json.load(sys.stdin); assert data["ok"] is True'
+if ! assert_exec_ok "test -f $plugin_path"; then
+  dump_plugin_tree
+  exit 1
+fi
+if ! assert_exec_ok "nvim --headless '+packloadall' '+if empty(globpath(&runtimepath, \"plugin/sleuth.vim\")) | cquit | endif' +qa"; then
+  dump_plugin_tree
+  exit 1
+fi
 
 echo "Destroying sandbox..."
 "$binary" destroy --yes --format json >/dev/null

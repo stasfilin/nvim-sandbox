@@ -198,6 +198,8 @@ func TestInvalidOptionsReturnUsageError(t *testing.T) {
 		{"create", "--source", "unknown"},
 		{"create", "--runtime"},
 		{"create", "--runtime", "lxc"},
+		{"create", "--plugin-manager", "unknown"},
+		{"create", "--plugin-manager", "custom"},
 		{"open", "--discovery", "sometimes"},
 		{"dashboard", "--path"},
 		{"dashboard", "--path", "relative"},
@@ -360,6 +362,28 @@ func TestCreateOptionsSelectDockerLikeRuntime(t *testing.T) {
 				t.Fatalf("runtime = %q, want %q", got, runtimeName)
 			}
 		})
+	}
+}
+
+func TestCreateOptionsSelectPluginManagers(t *testing.T) {
+	nativePack := parse([]string{"create", "--plugin-manager", "native-pack"}).createOptions()
+	if !nativePack.AttachLocalNvimSite || nativePack.PluginLabel != "Native pack" || !strings.Contains(nativePack.PluginInstallCommand, "helptags") {
+		t.Fatalf("native pack options = %#v", nativePack)
+	}
+
+	lazy := parse([]string{"create", "--plugin-manager", "lazy"}).createOptions()
+	if lazy.PluginLabel != "lazy.nvim" || !strings.Contains(lazy.PluginInstallCommand, "Lazy! sync") {
+		t.Fatalf("lazy options = %#v", lazy)
+	}
+
+	custom := parse([]string{"create", "--plugin-manager", "custom", "--plugin-install-command", "nvim --headless +qa"}).createOptions()
+	if custom.PluginLabel != "custom" || custom.PluginInstallCommand != "nvim --headless +qa" {
+		t.Fatalf("custom options = %#v", custom)
+	}
+
+	commandOnly := parse([]string{"create", "--plugin-install-command", "nvim --headless +qa"}).createOptions()
+	if commandOnly.PluginLabel != "custom" || commandOnly.PluginInstallCommand != "nvim --headless +qa" {
+		t.Fatalf("command-only options = %#v", commandOnly)
 	}
 }
 
@@ -932,7 +956,7 @@ func TestWizardNativePackPluginChoiceMountsSitePack(t *testing.T) {
 		},
 	}
 	model.applyPluginChoice(
-		`nvim --headless -c "lua for _, d in ipairs(vim.fn.glob('/root/.local/share/nvim/site/pack/*/start/*/doc', false, true)) do pcall(vim.cmd, 'helptags ' .. d) end" +qa`,
+		nativePackPluginCommand,
 		"Native pack (mount site/pack + helptags)",
 	)
 	if !model.result.AttachLocalNvimSite {

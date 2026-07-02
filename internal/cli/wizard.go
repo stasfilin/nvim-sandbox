@@ -552,16 +552,7 @@ func (m wizardModel) choices() []choice {
 			{label: "Disable network (isolated)", value: "disabled"},
 		}
 	case stepPluginManager:
-		return []choice{
-			{
-				label: "Native pack (mount site/pack + helptags)",
-				value: `nvim --headless -c "lua for _, d in ipairs(vim.fn.glob('/root/.local/share/nvim/site/pack/*/start/*/doc', false, true)) do pcall(vim.cmd, 'helptags ' .. d) end" +qa`,
-			},
-			{label: "lazy.nvim", value: `nvim --headless "+Lazy! sync" +qa`},
-			{label: "packer.nvim", value: `nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync'`},
-			{label: "vim-plug", value: `nvim --headless +PlugInstall +qall`},
-			{label: "Custom command", value: "custom"},
-		}
+		return pluginManagerChoices()
 	case stepNeovimInstall, stepEditorToolsInstall, stepMount, stepPluginInstall, stepConnect, stepStopOnExit:
 		return []choice{{label: "Yes", value: "yes"}, {label: "No", value: "no"}}
 	default:

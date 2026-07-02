@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Run Neovim in a persistent, project-scoped development container without adding
-container plumbing to your editor configuration.
+container plumbing to your editor configuration or your project repository.
 
 `nvim-sandbox` is a standalone Go CLI. It finds the current project, creates one
 sandbox for it, mounts the project at `/workspace`, and opens Neovim inside the
@@ -15,7 +15,7 @@ installation to maintain.
 `nvim-sandbox` is an independent community project. It is not affiliated with,
 sponsored by, or endorsed by the Neovim project.
 
-## Why use it?
+## Highlights
 
 - Keep compilers, language servers, and project dependencies off the host.
 - Reopen the same container instead of rebuilding an environment for every edit.
@@ -28,13 +28,13 @@ sponsored by, or endorsed by the Neovim project.
 
 ## Quick start
 
-You need macOS or Linux and one supported container runtime on `PATH`:
+Requirements:
 
-1. [Apple Container](https://github.com/apple/container)
-2. [Docker](https://docs.docker.com/engine/)
-3. [Podman](https://podman.io/docs/installation)
+- macOS or Linux.
+- One supported container runtime on `PATH`: [Apple Container](https://github.com/apple/container),
+  [Docker](https://docs.docker.com/engine/), or [Podman](https://podman.io/docs/installation).
 
-That order is also the default runtime detection priority.
+Runtime auto-detection checks Apple Container first, then Docker, then Podman.
 
 Install with Homebrew:
 
@@ -55,15 +55,20 @@ runtime, image, Neovim version, extra packages, editor tools, network policy,
 local configuration mounts, and container lifecycle policy. When setup
 finishes, connect to Neovim from the dashboard.
 
-The direct command-line equivalent is:
+For a non-interactive first run:
 
 ```sh
-nvim-sandbox create
+nvim-sandbox create --no-interactive --connect
+```
+
+Once the sandbox exists, the dashboard and direct commands reuse it:
+
+```sh
+nvim-sandbox
 nvim-sandbox connect
 ```
 
-Once the sandbox exists, `nvim-sandbox` reopens its dashboard and
-`nvim-sandbox connect` starts the container when needed.
+`connect` starts the container when needed.
 
 Human-readable output shows project directory names by default. Show absolute
 paths when needed:
@@ -73,6 +78,12 @@ nvim-sandbox --path full
 nvim-sandbox create --path full
 nvim-sandbox status --path full
 nvim-sandbox images --path full
+```
+
+Check the local environment when something looks wrong:
+
+```sh
+nvim-sandbox doctor
 ```
 
 ## Common workflows
@@ -125,6 +136,18 @@ nvim-sandbox create --dockerfile
 The Dockerfile is never built implicitly. Selecting it in the wizard or passing
 `--dockerfile` is always required.
 
+Use the CLI from scripts:
+
+```sh
+nvim-sandbox status --json
+nvim-sandbox runtime --json
+nvim-sandbox exec -- make test
+```
+
+Commands that can modify or remove state keep interactive confirmations by
+default. Use explicit flags such as `--no-interactive`, `--yes`, and
+`--format json` when automation needs predictable behavior.
+
 ## How it works
 
 To find the project root, the CLI checks these markers in order and walks upward
@@ -172,7 +195,7 @@ When no managed additions are selected for a Dockerfile-based sandbox, the
 project image is used directly. The project Dockerfile does not need to install
 Neovim if the wizard is configured to add it.
 
-### Local Neovim configuration
+### Neovim configuration and plugins
 
 The wizard can mount existing host configuration read-only:
 
@@ -184,6 +207,30 @@ The wizard can mount existing host configuration read-only:
 
 This keeps the host configuration as the source of truth while preventing the
 container from changing it.
+
+Local native packages can also be mounted read-only:
+
+```text
+~/.local/share/nvim/site/pack -> /root/.local/share/nvim/site/pack
+```
+
+Plugin installation can be run after sandbox creation for common managers:
+
+```sh
+nvim-sandbox create --plugin-manager lazy.nvim
+nvim-sandbox create --plugin-manager packer.nvim
+nvim-sandbox create --plugin-manager vim-plug
+nvim-sandbox create --plugin-manager native-pack
+```
+
+For custom plugin setups, provide the command that should run inside the
+container:
+
+```sh
+nvim-sandbox create \
+  --plugin-manager custom \
+  --plugin-install-command 'nvim --headless "+Lazy! sync" +qa'
+```
 
 ### State
 
@@ -203,6 +250,8 @@ being silently discarded.
 
 ## Commands
 
+### Daily use
+
 | Command | Purpose |
 | --- | --- |
 | `nvim-sandbox` | Open the dashboard in a terminal; otherwise print status. |
@@ -212,11 +261,26 @@ being silently discarded.
 | `exec -- <cmd>` | Run a command in `/workspace`. |
 | `status` | Show saved and live runtime state. |
 | `logs` | Show container logs. |
+
+### Lifecycle
+
+| Command | Purpose |
+| --- | --- |
 | `stop` / `restart` | Stop or restart the project container. |
 | `destroy [--yes]` | Remove the container and project metadata. |
 | `open` / `attach` | Start an existing sandbox. |
+
+### Project decisions
+
+| Command | Purpose |
+| --- | --- |
 | `enable` / `disable` | Create a sandbox or mark the project ignored. |
 | `reset` | Remove the saved project decision. |
+
+### Inspection and maintenance
+
+| Command | Purpose |
+| --- | --- |
 | `runtime` | Show detected and available runtimes. |
 | `images` | List managed images referenced by projects. |
 | `network` | Show or change network settings. |
@@ -245,6 +309,9 @@ nvim-sandbox help all
 | `--install-lsp` | Install the common editor-tool profile. |
 | `--lsp-tools <list>` | Install selected built-in tools or npm LSP packages. |
 | `--attach-local-vim-config` | Mount existing editor configuration read-only. |
+| `--attach-local-nvim-site` | Mount local native packages from `site/pack` read-only. |
+| `--plugin-manager <name>` | Run a built-in plugin install command for `native-pack`, `lazy.nvim`, `packer.nvim`, or `vim-plug`. |
+| `--plugin-install-command <cmd>` | Run a custom plugin install command inside the container. |
 | `--connect` | Connect after creation. |
 | `--stop-on-exit` | Stop the container when the editor exits. |
 | `--keep-running` | Leave the container running when the editor exits. |
@@ -398,6 +465,16 @@ Run the same aggregate quality gate used by CI:
 make check
 ```
 
+Useful targeted checks:
+
+| Command | What it validates |
+| --- | --- |
+| `make check-static` | Formatting, modules, vet, shell scripts, Homebrew formula generation, and notices. |
+| `make test` | Go tests. |
+| `make test-race` | Go tests with the race detector. |
+| `make test-install` | Staged installs, custom `BINDIR`, uninstall cleanup, and paths with spaces. |
+| `make test-packages` | Release archives, checksums, executable payloads, and Debian metadata when available. |
+
 Runtime integration tests are separate because they require the corresponding
 runtime:
 
@@ -406,6 +483,10 @@ make test-e2e-docker
 make test-e2e-podman
 make test-e2e-apple-container
 ```
+
+Additional E2E targets cover LSP tools, alternate distributions, and plugin
+managers for Docker and Podman. See the `test-e2e-*` targets in the
+[`Makefile`](Makefile).
 
 Commits and pull request titles use Conventional Commits. See
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for the release rules and targeted checks.

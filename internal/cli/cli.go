@@ -59,7 +59,7 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	case "connect":
 		return connect(service, opts, stdout, stderr)
 	case "shell":
-		opts.rest = []string{"/bin/sh", "-lc", "exec /bin/bash 2>/dev/null || exec /bin/sh"}
+		opts.rest = []string{"/bin/sh", "-lc", "[ -x /bin/bash ] && exec /bin/bash || exec /bin/sh"}
 		return connect(service, opts, stdout, stderr)
 	case "exec":
 		return execCommand(service, opts, stdout, stderr)

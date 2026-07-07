@@ -853,7 +853,7 @@ func TestShellUsesBashWithPOSIXFallback(t *testing.T) {
 	if code := Run([]string{"shell", "--format", "json"}, nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "exec /bin/bash") || !strings.Contains(stdout.String(), "exec /bin/sh") {
+	if !strings.Contains(stdout.String(), "[ -x /bin/bash ]") || !strings.Contains(stdout.String(), "exec /bin/sh") {
 		t.Fatalf("shell args do not include fallback: %s", stdout.String())
 	}
 }

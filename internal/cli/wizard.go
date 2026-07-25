@@ -434,6 +434,11 @@ func (m wizardModel) renderInstallInput() string {
 	return m.withSummary(strings.Join(lines, "\n"), false)
 }
 
+var reviewSectionHeadings = map[string]string{
+	"Runtime":      "Configuration",
+	"After create": "Lifecycle",
+}
+
 func (m wizardModel) renderReview() string {
 	styles := m.styles()
 	lines := []string{styles.title.Render("Create plan"), ""}
@@ -441,7 +446,12 @@ func (m wizardModel) renderReview() string {
 	if len(summary) == 0 {
 		lines = append(lines, styles.muted.Render("No options selected. Existing sandbox will be used."))
 	} else {
+		divider := styles.divider.Render(strings.Repeat("─", maxInt(20, m.panelWidth()-8)))
 		for _, line := range summary {
+			label, _, _ := strings.Cut(line, ": ")
+			if heading, ok := reviewSectionHeadings[label]; ok {
+				lines = append(lines, "", divider, styles.heading.Render(strings.ToUpper(heading)), "")
+			}
 			lines = append(lines, formatSummaryLines(styles, line, maxInt(28, m.panelWidth()-8))...)
 		}
 	}
@@ -468,7 +478,7 @@ func formatSummaryLine(styles wizardStyles, line string) string {
 	if !ok {
 		return styles.body.Render(line)
 	}
-	return styles.muted.Render(label+": ") + styles.body.Render(value)
+	return styles.muted.Render(label+": ") + summaryValueStyle(styles, label, value).Render(value)
 }
 
 func formatSummaryLines(styles wizardStyles, line string, width int) []string {
@@ -478,15 +488,26 @@ func formatSummaryLines(styles wizardStyles, line string, width int) []string {
 	}
 	prefix := label + ": "
 	wrapped := wrapWords(value, maxInt(12, width-len(prefix)))
+	valueStyle := summaryValueStyle(styles, label, value)
 	lines := make([]string, 0, len(wrapped))
 	for index, part := range wrapped {
 		if index == 0 {
-			lines = append(lines, styles.muted.Render(prefix)+styles.body.Render(part))
+			lines = append(lines, styles.muted.Render(prefix)+valueStyle.Render(part))
 			continue
 		}
-		lines = append(lines, strings.Repeat(" ", len(prefix))+styles.body.Render(part))
+		lines = append(lines, strings.Repeat(" ", len(prefix))+valueStyle.Render(part))
 	}
 	return lines
+}
+
+func summaryValueStyle(styles wizardStyles, label string, value string) lipgloss.Style {
+	if label == "Network" {
+		if value == "enabled" {
+			return styles.success
+		}
+		return styles.warning
+	}
+	return styles.body
 }
 
 func wrapWords(value string, width int) []string {

@@ -171,24 +171,21 @@ func displayProjectPath(projectRoot string, pathDisplay string) string {
 
 func (m dashboardModel) renderBody() string {
 	styles := newWizardStyles(m.darkBackground)
+	divider := styles.divider.Render(strings.Repeat("─", dividerWidth(m.panelWidth())))
 	rows := []string{styles.title.Render(m.prompt()), ""}
 	currentSection := ""
 	for _, detail := range m.details() {
 		if detail.label == "Update" {
-			rows = append(rows, styles.accent.Render(fmt.Sprintf("%-14s", detail.label+":")+detail.value), "")
+			rows = append(rows, styles.accent.Render(fmt.Sprintf("%-14s", detail.label+":")+detail.value))
 			continue
 		}
 		if detail.section != currentSection {
-			if currentSection != "" {
-				rows = append(rows, "")
-			}
 			currentSection = detail.section
-			rows = append(rows, styles.heading.Render(strings.ToUpper(currentSection)))
+			rows = append(rows, "", divider, styles.heading.Render(strings.ToUpper(currentSection)), "")
 		}
 		rows = append(rows, dashboardDetailLine(styles, detail.label, detail.value))
 	}
-	rows = append(rows, "", styles.divider.Render(strings.Repeat("─", dividerWidth(m.panelWidth()))))
-	rows = append(rows, styles.title.Render("Actions"), "")
+	rows = append(rows, "", divider, styles.title.Render("Actions"), "")
 	for i, choice := range m.choices() {
 		prefix := "  "
 		label := styles.body.Render(choice.label)
@@ -266,11 +263,12 @@ func (m dashboardModel) details() []dashboardDetail {
 }
 
 func dashboardDetailLine(styles wizardStyles, label string, value string) string {
-	valueStyle := styles.body
+	prefix := styles.muted.Render(fmt.Sprintf("%-14s", label+":"))
 	if label == "State" || label == "Decision" {
-		valueStyle = statusToneStyle(styles, value)
+		tone := statusToneStyle(styles, value)
+		return prefix + tone.Render("● "+value)
 	}
-	return styles.muted.Render(fmt.Sprintf("%-14s", label+":")) + valueStyle.Render(value)
+	return prefix + styles.body.Render(value)
 }
 
 func statusToneStyle(styles wizardStyles, value string) lipgloss.Style {

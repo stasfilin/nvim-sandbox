@@ -91,6 +91,10 @@ type wizardStyles struct {
 	inputInactive lipgloss.Style
 	summary       lipgloss.Style
 	errorText     lipgloss.Style
+	success       lipgloss.Style
+	warning       lipgloss.Style
+	heading       lipgloss.Style
+	divider       lipgloss.Style
 }
 
 func newWizardStyles(dark bool) wizardStyles {
@@ -105,6 +109,9 @@ func newWizardStyles(dark bool) wizardStyles {
 	border := lightDark(lipgloss.Color("#64748b"), lipgloss.Color("#94a3b8"))
 	inputBorder := lightDark(lipgloss.Color("#7e22ce"), lipgloss.Color("#c084fc"))
 	errorColor := lightDark(lipgloss.Color("#b91c1c"), lipgloss.Color("#fca5a5"))
+	successColor := lightDark(lipgloss.Color("#15803d"), lipgloss.Color("#4ade80"))
+	warningColor := lightDark(lipgloss.Color("#b45309"), lipgloss.Color("#fbbf24"))
+	dividerColor := lightDark(lipgloss.Color("#cbd5e1"), lipgloss.Color("#334155"))
 
 	return wizardStyles{
 		accent:      lipgloss.NewStyle().Foreground(accent).Bold(true),
@@ -131,6 +138,10 @@ func newWizardStyles(dark bool) wizardStyles {
 			BorderForeground(border).
 			PaddingLeft(2),
 		errorText: lipgloss.NewStyle().Foreground(errorColor),
+		success:   lipgloss.NewStyle().Foreground(successColor),
+		warning:   lipgloss.NewStyle().Foreground(warningColor),
+		heading:   lipgloss.NewStyle().Foreground(muted).Bold(true),
+		divider:   lipgloss.NewStyle().Foreground(dividerColor),
 	}
 }
 

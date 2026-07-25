@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea/v2"
 
@@ -694,6 +695,37 @@ func TestStatusHumanForEnabledProjectWithoutMetadataShowsRecovery(t *testing.T) 
 	}
 	if !strings.Contains(stdout.String(), "Status:     recovery needed") {
 		t.Fatalf("status did not show recovery:\n%s", stdout.String())
+	}
+}
+
+func TestStatusShowsUpdateNoticeOutsideDashboard(t *testing.T) {
+	withProject(t)
+	state, err := app.NewState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeUpdateCache(filepath.Join(state.Base(), "update-check.json"), updateCache{
+		LatestVersion: "9.9.9",
+		ReleaseURL:    "https://example.test/v9.9.9",
+		CheckedAt:     time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	previousVersion := version
+	version = "0.1.0"
+	t.Cleanup(func() { version = previousVersion })
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"status", "--no-interactive"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Update available: v9.9.9 (current v0.1.0)") {
+		t.Fatalf("status did not show update notice:\n%s", stdout.String())
 	}
 }
 

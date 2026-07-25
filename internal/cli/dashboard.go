@@ -173,6 +173,10 @@ func (m dashboardModel) renderBody() string {
 	styles := newWizardStyles(m.darkBackground)
 	rows := []string{styles.title.Render(m.prompt()), ""}
 	for _, detail := range m.details() {
+		if detail.label == "Update" {
+			rows = append(rows, styles.accent.Render(fmt.Sprintf("%-14s", detail.label+":")+detail.value))
+			continue
+		}
 		rows = append(rows, dashboardDetailLine(styles, detail.label, detail.value))
 	}
 	rows = append(rows, "", styles.title.Render("Actions"), "")

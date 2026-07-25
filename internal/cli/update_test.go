@@ -97,6 +97,37 @@ func TestCheckForUpdateFallsBackToStaleCacheWhenOffline(t *testing.T) {
 	}
 }
 
+func TestAppendUpdateNoticeAddsUpgradeInstruction(t *testing.T) {
+	stateBase := t.TempDir()
+	cache := updateCache{
+		LatestVersion: "0.2.0",
+		ReleaseURL:    "https://example.test/v0.2.0",
+		CheckedAt:     time.Now(),
+	}
+	if err := writeUpdateCache(filepath.Join(stateBase, "update-check.json"), cache); err != nil {
+		t.Fatal(err)
+	}
+	text := appendUpdateNotice("status text", "0.1.1", stateBase)
+	if !strings.Contains(text, "Update available: v0.2.0 (current v0.1.1)") {
+		t.Fatalf("text = %q", text)
+	}
+	if !strings.Contains(text, "brew upgrade nvim-sandbox") {
+		t.Fatalf("text missing upgrade instruction: %q", text)
+	}
+}
+
+func TestAppendUpdateNoticeLeavesTextUnchangedWhenUpToDate(t *testing.T) {
+	stateBase := t.TempDir()
+	cache := updateCache{LatestVersion: "0.1.1", CheckedAt: time.Now()}
+	if err := writeUpdateCache(filepath.Join(stateBase, "update-check.json"), cache); err != nil {
+		t.Fatal(err)
+	}
+	text := appendUpdateNotice("status text", "0.1.1", stateBase)
+	if text != "status text" {
+		t.Fatalf("text = %q, want unchanged", text)
+	}
+}
+
 func TestUpdateCheckCanBeDisabled(t *testing.T) {
 	t.Setenv("NVIM_SANDBOX_NO_UPDATE_CHECK", "true")
 	if info := checkForUpdate("0.1.1", t.TempDir()); info != (updateInfo{}) {

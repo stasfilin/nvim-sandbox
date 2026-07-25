@@ -171,6 +171,9 @@ func statusOrDashboard(service *app.Service, opts options, stdout io.Writer, std
 	if statusValue.Metadata == nil && opts.format != "json" && opts.noInteractive {
 		text += "\n\nRun `nvim-sandbox create` to create a sandbox for this project."
 	}
+	if opts.format != "json" {
+		text = appendUpdateNotice(text, currentVersion().Version, service.State.Base())
+	}
 	return respond(stdout, opts, 0, payloadFrom(statusValue), text)
 }
 
@@ -392,7 +395,11 @@ func status(service *app.Service, opts options, stdout io.Writer, stderr io.Writ
 	if err != nil {
 		return fail(stderr, opts, err)
 	}
-	return respond(stdout, opts, 0, payloadFrom(result), humanStatus(result, opts.pathDisplay))
+	text := humanStatus(result, opts.pathDisplay)
+	if opts.format != "json" {
+		text = appendUpdateNotice(text, currentVersion().Version, service.State.Base())
+	}
+	return respond(stdout, opts, 0, payloadFrom(result), text)
 }
 
 func logs(service *app.Service, opts options, stdout io.Writer, stderr io.Writer) int {

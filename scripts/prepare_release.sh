@@ -7,9 +7,11 @@ artifact_dir="$root_dir/build-artifacts-release"
 release_dir="$root_dir/release"
 
 "$root_dir/scripts/verify_release_version.sh" "$version"
-printf '%s\n' "$version" >"$root_dir/VERSION"
 cd "$root_dir"
 
+# Build before touching the tracked VERSION file: go build stamps binaries
+# with vcs.modified via `git status --porcelain`, so writing VERSION first
+# would make every release build report itself as dirty.
 for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
   goos=${target%-*}
   goarch=${target#*-}
@@ -27,3 +29,5 @@ done
 
 "$root_dir/scripts/update_homebrew_formula.sh" \
   "$version" "$release_dir/SHA256SUMS"
+
+printf '%s\n' "$version" >"$root_dir/VERSION"

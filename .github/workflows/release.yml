@@ -37,7 +37,7 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$VALIDATED_SHA"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -79,7 +79,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 

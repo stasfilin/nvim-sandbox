@@ -41,6 +41,18 @@ type githubRelease struct {
 	HTMLURL string `json:"html_url"`
 }
 
+func appendUpdateNotice(text string, currentVersion string, stateBase string) string {
+	info := checkForUpdate(currentVersion, stateBase)
+	if info.LatestVersion == "" {
+		return text
+	}
+	return text + fmt.Sprintf(
+		"\n\nUpdate available: v%s (current v%s) — run `brew upgrade nvim-sandbox`.",
+		info.LatestVersion,
+		currentVersion,
+	)
+}
+
 func checkForUpdate(currentVersion string, stateBase string) updateInfo {
 	if updateCheckDisabled() {
 		return updateInfo{}

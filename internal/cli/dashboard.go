@@ -171,11 +171,21 @@ func displayProjectPath(projectRoot string, pathDisplay string) string {
 
 func (m dashboardModel) renderBody() string {
 	styles := newWizardStyles(m.darkBackground)
+	divider := styles.divider.Render(strings.Repeat("─", dividerWidth(m.panelWidth())))
 	rows := []string{styles.title.Render(m.prompt()), ""}
+	currentSection := ""
 	for _, detail := range m.details() {
+		if detail.label == "Update" {
+			rows = append(rows, styles.accent.Render(fmt.Sprintf("%-14s", detail.label+":")+detail.value))
+			continue
+		}
+		if detail.section != currentSection {
+			currentSection = detail.section
+			rows = append(rows, "", divider, styles.heading.Render(strings.ToUpper(currentSection)), "")
+		}
 		rows = append(rows, dashboardDetailLine(styles, detail.label, detail.value))
 	}
-	rows = append(rows, "", styles.title.Render("Actions"), "")
+	rows = append(rows, "", divider, styles.title.Render("Actions"), "")
 	for i, choice := range m.choices() {
 		prefix := "  "
 		label := styles.body.Render(choice.label)
@@ -189,9 +199,14 @@ func (m dashboardModel) renderBody() string {
 	return strings.Join(rows, "\n")
 }
 
+func dividerWidth(panelWidth int) int {
+	return maxInt(20, panelWidth-8)
+}
+
 type dashboardDetail struct {
-	label string
-	value string
+	label   string
+	value   string
+	section string
 }
 
 func (m dashboardModel) details() []dashboardDetail {
@@ -219,13 +234,13 @@ func (m dashboardModel) details() []dashboardDetail {
 	}
 	if m.status.Metadata != nil {
 		details = append(details,
-			dashboardDetail{label: "Runtime", value: fallback(runtimeDisplayName(m.status.Runtime), "unknown")},
-			dashboardDetail{label: "Dockerfile", value: yesNo(app.HasDockerfile(m.status.Context.ProjectRoot, m.cfg))},
-			dashboardDetail{label: "Decision", value: fallback(m.status.Decision, "unknown")},
-			dashboardDetail{label: "State", value: state},
-			dashboardDetail{label: "Container", value: fallback(m.status.ContainerName, "-")},
-			dashboardDetail{label: "Image", value: fallback(m.status.Image, "-")},
-			dashboardDetail{label: "Stop on exit", value: yesNo(m.status.StopOnExit)},
+			dashboardDetail{section: "Environment", label: "Runtime", value: fallback(runtimeDisplayName(m.status.Runtime), "unknown")},
+			dashboardDetail{section: "Environment", label: "Dockerfile", value: yesNo(app.HasDockerfile(m.status.Context.ProjectRoot, m.cfg))},
+			dashboardDetail{section: "Sandbox", label: "Decision", value: fallback(m.status.Decision, "unknown")},
+			dashboardDetail{section: "Sandbox", label: "State", value: state},
+			dashboardDetail{section: "Sandbox", label: "Container", value: fallback(m.status.ContainerName, "-")},
+			dashboardDetail{section: "Sandbox", label: "Image", value: fallback(m.status.Image, "-")},
+			dashboardDetail{section: "Sandbox", label: "Stop on exit", value: yesNo(m.status.StopOnExit)},
 		)
 	} else {
 		available := []string{}
@@ -237,18 +252,34 @@ func (m dashboardModel) details() []dashboardDetail {
 			availableText = strings.Join(available, ", ")
 		}
 		details = append(details,
-			dashboardDetail{label: "Runtime", value: "choose during creation"},
-			dashboardDetail{label: "Available", value: availableText},
-			dashboardDetail{label: "Dockerfile", value: yesNo(app.HasDockerfile(m.status.Context.ProjectRoot, m.cfg))},
-			dashboardDetail{label: "Decision", value: fallback(m.status.Decision, "unknown")},
-			dashboardDetail{label: "State", value: state},
+			dashboardDetail{section: "Environment", label: "Runtime", value: "choose during creation"},
+			dashboardDetail{section: "Environment", label: "Available", value: availableText},
+			dashboardDetail{section: "Environment", label: "Dockerfile", value: yesNo(app.HasDockerfile(m.status.Context.ProjectRoot, m.cfg))},
+			dashboardDetail{section: "Project", label: "Decision", value: fallback(m.status.Decision, "unknown")},
+			dashboardDetail{section: "Project", label: "State", value: state},
 		)
 	}
 	return details
 }
 
 func dashboardDetailLine(styles wizardStyles, label string, value string) string {
-	return styles.muted.Render(fmt.Sprintf("%-14s", label+":")) + styles.body.Render(value)
+	prefix := styles.muted.Render(fmt.Sprintf("%-14s", label+":"))
+	if label == "State" || label == "Decision" {
+		tone := statusToneStyle(styles, value)
+		return prefix + tone.Render("● "+value)
+	}
+	return prefix + styles.body.Render(value)
+}
+
+func statusToneStyle(styles wizardStyles, value string) lipgloss.Style {
+	switch strings.ToLower(value) {
+	case "running", "enabled":
+		return styles.success
+	case "unknown":
+		return styles.warning
+	default:
+		return styles.body
+	}
 }
 
 func runtimeDisplayName(runtimeName string) string {

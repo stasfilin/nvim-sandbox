@@ -20,7 +20,7 @@ notices are reproduced below.
 - github.com/rivo/uniseg v0.4.7
 - github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
 - golang.org/x/sync v0.17.0
-- golang.org/x/sys v0.46.0
+- golang.org/x/sys v0.47.0
 
 ## License texts
 
@@ -470,7 +470,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### golang.org/x/sys
 
-Version: v0.46.0
+Version: v0.47.0
 
 ```text
 Copyright 2009 The Go Authors.

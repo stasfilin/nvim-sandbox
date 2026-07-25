@@ -1,30 +1,30 @@
 class NvimSandbox < Formula
   desc "Create project-scoped development containers for Neovim"
   homepage "https://github.com/stasfilin/nvim-sandbox"
-  version "0.6.1"
+  version "0.6.2"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.1/nvim-sandbox_macos_arm64.tar.gz"
-      sha256 "78a1a465178f743e32d0a802295fb4af468f5caee3b4359fb3ac2ecdbe251e0e"
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.2/nvim-sandbox_macos_arm64.tar.gz"
+      sha256 "57fa3479ef73021dac8403cf75c40cb3fb6ff9733a3b3506ff9311559b2a2b98"
     end
 
     on_intel do
-      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.1/nvim-sandbox_macos_amd64.tar.gz"
-      sha256 "1f6d6bd1971dc3e93e543674c3d55bfa832565a9f7fae9161271afe41c3ca47a"
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.2/nvim-sandbox_macos_amd64.tar.gz"
+      sha256 "ead2dc6a0606cb20a0e6d3f2e3ad7c1be052d96f61db14fd48f00448cf78af9a"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.1/nvim-sandbox_linux_arm64.tar.gz"
-      sha256 "33b1d0eb6fd7aa76a2632a269f1b4f90c0bc34f0637440a3d418b9738761bbe4"
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.2/nvim-sandbox_linux_arm64.tar.gz"
+      sha256 "7a987701d59ed127c10171036f040424d072e64cc61c80d08a677f3c7b3906d5"
     end
 
     on_intel do
-      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.1/nvim-sandbox_linux_amd64.tar.gz"
-      sha256 "3287fade4d1234fe2850390117b6361da86b7c484d3ab57b137c9cea6a93352b"
+      url "https://github.com/stasfilin/nvim-sandbox/releases/download/v0.6.2/nvim-sandbox_linux_amd64.tar.gz"
+      sha256 "a79476e247bc0fade181d7c40a77de2304a0fe79c4a7da95ca05de76ef25eb74"
     end
   end
 
